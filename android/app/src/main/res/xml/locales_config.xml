@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Languages Orbit Rush ships in. Android 13+ shows these under
+     Settings → Apps → Orbit Rush → Language. Keep in sync with
+     Lang.LIST in www/index.html and the fastlane/metadata store listings. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en"/>
+    <locale android:name="es"/>
+    <locale android:name="pt-BR"/>
+    <locale android:name="id"/>
+    <locale android:name="fil"/>
+</locale-config>

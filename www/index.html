@@ -1,0 +1,2665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover → we can read safe-area insets on notched phones.
+     user-scalable=no + touch-action:none kills double-tap zoom & 300ms delay. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2f6bff">
+<title>Orbit Rush</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   ORBIT RUSH — styles. Dark, high-contrast, thumb-sized touch targets.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  /* Safe-area insets (0 on non-notched devices / desktop browsers). */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  /* Height reserved for the AdMob banner; set from JS when a banner shows
+     so no UI or gameplay-critical info ever sits behind the ad. */
+  --banner-h: 0px;
+  --ink:#ffffff; --dim:#e4e8ffd9; --accent:#ffd23f; --accent2:#ff3ea5;
+  --panel:#3a1f9ef0; --btn:#ffffff2e; --deep:#24107a;   /* deep = outlines/shadows */
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  position:fixed; inset:0; overflow:hidden;
+  background:#2f6bff; color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  touch-action:none;                 /* no browser gestures, no tap delay */
+  user-select:none;-webkit-user-select:none;
+  overscroll-behavior:none;
+}
+canvas#game{position:absolute; inset:0; width:100%; height:100%; display:block}
+
+/* Invisible probes: their computed height gives us the safe-area inset in px
+   so the canvas renderer (which can't read env()) can offset the HUD. */
+#probe-top{position:absolute;top:0;height:var(--sat);width:1px;visibility:hidden}
+#probe-bottom{position:absolute;bottom:0;height:calc(var(--sab) + var(--banner-h));width:1px;visibility:hidden}
+
+/* ── Overlay screens ────────────────────────────────────────────────── */
+.screen{
+  position:absolute; inset:0; z-index:10;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:calc(var(--sat) + 16px) 22px calc(var(--sab) + var(--banner-h) + 16px);
+  background:linear-gradient(165deg,#3d74ffeb 0%,#7b3cffeb 55%,#ff4fa0eb 100%);
+  backdrop-filter:blur(2px);
+  text-align:center;
+}
+.screen.hidden{display:none}
+h1.logo{
+  font-size:clamp(38px,11vw,64px); font-weight:900; letter-spacing:.04em;
+  color:#fff;                         /* chunky candy title: white + deep drop */
+  text-shadow:0 5px 0 var(--deep),0 0 28px #ffffff99;
+  animation:logoFloat 3.2s ease-in-out infinite;   /* subtle live menu motion */
+}
+@keyframes logoFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-7px) rotate(1deg)}}
+.tag{color:var(--dim);font-size:15px;margin-top:-8px}
+
+button{
+  font:inherit; color:var(--ink); border:0; cursor:pointer;
+  background:var(--btn); border-radius:14px;
+  padding:14px 22px; min-height:52px; min-width:64px;  /* thumb-sized */
+  font-size:17px; font-weight:700;
+  transition:transform .08s;
+}
+button:active{transform:scale(.95)}
+button.primary{
+  background:linear-gradient(180deg,#ffe86b,#ffb01f); color:#5a2a00;
+  font-size:22px; padding:18px 54px; border-radius:18px;
+  box-shadow:0 6px 0 #c96a00,0 10px 28px #00000040;   /* chunky 3D press */
+  animation:pulseBtn 1.6s ease-in-out infinite;
+}
+@keyframes pulseBtn{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+button.ad{background:linear-gradient(180deg,#ff7ac0,#ff3ea5);color:#fff;box-shadow:0 5px 0 #b3166d}
+button.ghostbtn{background:#ffffff2e;box-shadow:0 4px 0 #00000026}
+button:disabled{opacity:.35; animation:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+
+.statline{color:var(--dim);font-size:14px;font-weight:600}
+.statline b{color:var(--ink)}
+.bigscore{font-size:clamp(52px,18vw,96px);font-weight:900;line-height:1;text-shadow:0 5px 0 var(--deep)}
+.newbest{color:#ffe86b;text-shadow:0 3px 0 var(--deep);font-weight:900;letter-spacing:.12em;animation:pulseBtn 1s infinite}
+
+/* game-over: headline + carried-over progress card */
+.headline{font-size:clamp(22px,7vw,30px);font-weight:900;color:#ffe86b;text-shadow:0 3px 0 var(--deep);
+  animation:pulseBtn 1.2s ease-in-out infinite;max-width:92vw}
+.headline.calm{color:#fff;animation:none}
+#over{gap:11px}
+.carry{width:min(340px,88vw);background:#00000024;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.carryrow{display:flex;justify-content:space-between;font-size:14px;font-weight:800}
+.mission .up{color:#3dffb4;font-weight:900;margin-left:4px}
+
+/* XP bar (start + game-over screens) */
+.xpwrap{width:min(320px,80vw)}
+.xpbar{height:10px;background:#00000030;border-radius:6px;overflow:hidden}
+.xpbar>i{display:block;height:100%;width:0%;border-radius:6px;
+  background:linear-gradient(90deg,#ffe86b,#ff9f1c);transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.xplabel{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-top:4px}
+
+/* Ghost bar: last run vs best */
+.ghost{position:relative;width:min(320px,80vw);height:14px;background:#00000030;border-radius:7px}
+.ghost>i.you{position:absolute;left:0;top:0;bottom:0;border-radius:7px;background:#ffd23f}
+.ghost>i.mark{position:absolute;top:-3px;bottom:-3px;width:3px;background:#fff;border-radius:2px}
+.ghost>span{position:absolute;right:6px;top:-18px;font-size:11px;color:var(--dim)}
+
+/* Missions */
+.missions{display:flex;flex-direction:column;gap:6px;width:min(340px,86vw)}
+.mission{display:flex;align-items:center;gap:10px;background:#ffffff26;border-radius:12px;
+  padding:9px 12px;font-size:13px;text-align:left}
+.mission .mprog{margin-left:auto;color:var(--dim);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mission.done{background:#ffd23f55}
+.mission.done .mprog{color:var(--accent)}
+
+/* Unlocks browser */
+#unlocks .tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:94vw}
+#unlocks .tabs button{padding:10px 14px;min-height:44px;min-width:0;font-size:14px}
+#unlocks .tabs button.on{background:#ffd23f;color:#5a2a00}
+.grid{display:grid;grid-template-columns:repeat(4,64px);gap:10px;max-height:44vh;
+  overflow-y:auto;padding:6px;touch-action:pan-y}
+.cell{width:64px;height:64px;border-radius:14px;border:2px solid #ffffff55;position:relative;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+.cell.eq{border-color:#fff;box-shadow:0 0 0 3px #ffd23f,0 0 16px #ffd23faa}
+.cell.lock{opacity:.42}
+.cell .cost{position:absolute;bottom:3px;left:0;right:0;font-size:9px;color:#fff;text-shadow:0 1px 2px #000}
+.cell .badge{position:absolute;top:-6px;right:-6px;background:var(--accent2);color:#fff;
+  font-size:8px;font-weight:900;padding:2px 5px;border-radius:8px;letter-spacing:.05em;
+  animation:pulseBtn 1.2s infinite}
+.cell.arm{border-color:#ffc94d;box-shadow:0 0 14px #ffc94daa;animation:pulseBtn .7s infinite}
+.packrow{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;min-height:54px;padding:10px 16px;font-size:14px;text-align:left;
+  background:#ffffff26;border-radius:12px}
+.packrow b{text-align:right;color:#ffe86b;font-size:13px;line-height:1.25}
+.packrow small{color:var(--dim);font-weight:400}
+#shop-dot{color:var(--accent2);font-size:22px;line-height:0;vertical-align:middle;margin-left:4px}
+
+/* Toast banners (level-up, unlock, streak, milestone) */
+#toasts{position:absolute;top:calc(var(--sat) + 112px);   /* below the in-game score + combo */
+  left:0;right:0;z-index:30;
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{
+  background:var(--panel);border:1px solid #ffffff2a;border-radius:14px;
+  padding:10px 20px;font-weight:800;font-size:16px;
+  animation:toastIn .35s cubic-bezier(.2,1.4,.4,1), toastOut .4s ease-in 2.6s forwards;
+  box-shadow:0 8px 30px #00000088;
+}
+.toast.big{font-size:20px;padding:14px 26px}
+@keyframes toastIn{from{transform:translateY(-30px) scale(.8);opacity:0}}
+@keyframes toastOut{to{transform:translateY(-16px);opacity:0}}
+
+/* Level-up full-screen flash + rising number */
+#lvlfx{position:absolute;inset:0;z-index:25;pointer-events:none;display:none;
+  align-items:center;justify-content:center}
+#lvlfx.on{display:flex;animation:lvlFlash .9s ease-out}
+#lvlfx .num{font-size:clamp(70px,26vw,150px);font-weight:900;color:#fff;
+  text-shadow:0 6px 0 var(--deep),0 0 40px #ffd23f;
+  animation:lvlRise 1.1s cubic-bezier(.2,.9,.3,1) forwards}
+@keyframes lvlFlash{0%{background:#ffd23f66}100%{background:transparent}}
+@keyframes lvlRise{0%{transform:translateY(50px) scale(.5);opacity:0}
+  30%{opacity:1}100%{transform:translateY(-40px) scale(1.15);opacity:0}}
+
+/* In-game pause button */
+#btn-pause{position:absolute;top:calc(var(--sat) + 10px);right:12px;z-index:5;
+  width:46px;height:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;
+  background:#ffffff33;font-size:18px;display:none;box-shadow:0 4px 0 #00000026}
+
+/* small util */
+.hidden{display:none !important}
+.dimtxt{color:var(--dim);font-size:12px;max-width:300px}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="probe-top"></div><div id="probe-bottom"></div>
+<button id="btn-pause" aria-label="Pause">II</button>
+<div id="toasts"></div>
+<div id="lvlfx"><div class="num" id="lvlfx-num">2</div></div>
+
+<!-- ── START SCREEN ─────────────────────────────────────────────────── -->
+<div class="screen" id="start">
+  <h1 class="logo">ORBIT RUSH</h1>
+  <div class="tag" data-i18n="tagline">tap to release · land in the next ring</div>
+  <div class="statline"><span data-i18n="best">BEST</span> <b id="s-best">0</b> · <span data-i18n="streak">STREAK</span> <b id="s-streak">0</b>🔥 · <b id="s-rebirth"></b></div>
+  <div class="statline">🪙 <b id="s-coins">0</b> <span data-i18n="coins">coins</span></div>
+  <div class="xpwrap">
+    <div class="xplabel"><span><span data-i18n="lvl">LVL</span> <b id="s-level">1</b></span><span id="s-xptext">0 / 100 XP</span></div>
+    <div class="xpbar"><i id="s-xpfill"></i></div>
+  </div>
+  <button class="primary" id="btn-play" data-i18n="play">PLAY</button>
+  <div class="row">
+    <button class="ghostbtn" id="btn-unlocks">🛒 <span data-i18n="shop">Shop</span><span id="shop-dot" class="hidden">•</span></button>
+    <button class="ghostbtn" id="btn-sound">🔊</button>
+    <button class="ghostbtn" id="btn-music">🎵 ON</button>
+    <button class="ghostbtn" id="btn-fx">✨ FX: HI</button>
+  </div>
+  <button class="ghostbtn" id="btn-lang" style="min-height:44px;padding:8px 16px;font-size:14px">🌐 English</button>
+  <button class="ghostbtn hidden" id="btn-rebirth">🌀 REBIRTH — permanent XP boost</button>
+  <div class="missions" id="s-missions"></div>
+  <button class="ghostbtn" id="btn-privacy" style="min-height:40px;padding:8px 14px;font-size:12px;font-weight:400" data-i18n="privacy">Privacy &amp; ad options</button>
+</div>
+
+<!-- ── GAME OVER SCREEN ─────────────────────────────────────────────── -->
+<div class="screen hidden" id="over">
+  <div class="headline" id="o-head"></div>
+  <div class="bigscore" id="o-score">0</div>
+  <div class="ghost"><span><span data-i18n="best_lower">best</span> <b id="o-bestn">0</b></span><i class="you" id="o-you"></i><i class="mark" id="o-mark"></i></div>
+  <div class="statline" id="o-miss"></div>
+  <div class="row">
+    <button class="ad" id="btn-continue">▶ <span data-i18n="cont">CONTINUE</span><br><small data-i18n="watch_ad_once">watch ad · once</small></button>
+    <button class="ad" id="btn-coinrevive">▶ <span data-i18n="cont">CONTINUE</span><br><small>🪙 <span id="o-revcost">60</span></small></button>
+    <button class="ad" id="btn-doublexp"><span data-i18n="double_xp">2× XP</span><br><small data-i18n="watch_ad">watch ad</small></button>
+  </div>
+  <button class="primary" id="btn-retry" data-i18n="play_again">TAP TO PLAY AGAIN</button>
+  <!-- progress that carries over: a loss still moves you forward -->
+  <div class="carry">
+    <div class="carryrow"><span id="o-xp"></span><span id="o-coins"></span></div>
+    <div class="xpwrap" style="width:100%">
+      <div class="xplabel"><span><span data-i18n="lvl">LVL</span> <b id="o-level">1</b></span><span id="o-xptext"></span></div>
+      <div class="xpbar"><i id="o-xpfill"></i></div>
+    </div>
+    <div class="missions" id="o-missions" style="width:100%"></div>
+  </div>
+  <button class="ghostbtn" id="btn-home" style="min-height:40px;padding:8px 18px;font-size:14px" data-i18n="home">Home</button>
+</div>
+
+<!-- ── PAUSE SCREEN ─────────────────────────────────────────────────── -->
+<div class="screen hidden" id="pause">
+  <h1 class="logo" style="font-size:34px" data-i18n="paused">PAUSED</h1>
+  <button class="primary" id="btn-resume" data-i18n="resume">RESUME</button>
+  <div class="row">
+    <button class="ghostbtn" id="btn-p-restart" data-i18n="restart">Restart</button>
+    <button class="ghostbtn" id="btn-p-home" data-i18n="home">Home</button>
+  </div>
+</div>
+
+<!-- ── SHOP SCREEN ──────────────────────────────────────────────────── -->
+<div class="screen hidden" id="unlocks">
+  <h1 class="logo" style="font-size:30px" data-i18n="shop_title">SHOP</h1>
+  <div class="statline">🪙 <b id="u-coins">0</b> · <span data-i18n="lifetime_xp">lifetime XP</span> <b id="u-xp">0</b></div>
+  <div class="tabs">
+    <button data-tab="trail" class="on" data-i18n="tab_colors">Colors</button>
+    <button data-tab="skin" data-i18n="tab_skins">Skins</button>
+    <button data-tab="bg" data-i18n="tab_worlds">Worlds</button>
+    <button data-tab="sound" data-i18n="tab_sound">Sound</button>
+    <button data-tab="fx" data-i18n="tab_fx">FX</button>
+    <button data-tab="coins">🪙+</button>
+  </div>
+  <div class="grid" id="u-grid"></div>
+  <div class="dimtxt" data-i18n="shop_help">XP unlocks a tier · coins buy it. Tap an owned item to equip (sound &amp; FX preview on tap). New styles generate forever.</div>
+  <button class="ghostbtn" id="btn-u-back" data-i18n="back">Back</button>
+</div>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   ██  ORBIT RUSH — CONFIG BLOCK  ██
+   Every tuning constant and every ad ID lives HERE and only here.
+   ═══════════════════════════════════════════════════════════════════════ */
+const CONFIG = {
+
+  /* ── ADS (Google OFFICIAL TEST IDs — safe in dev, must not ship) ────
+     Plugin: @capacitor-community/admob PINNED to 7.2.0 in package.json.
+     The rewarded/interstitial event names used below are v7-specific
+     (v8 renames them) — do not bump the major without updating Ads. ── */
+  ADMOB_APP_ID:          "ca-app-pub-3940256099942544~3347511713", // TODO: replace before release (also in AndroidManifest.xml + capacitor.config.json!)
+  BANNER_AD_UNIT_ID:     "ca-app-pub-3940256099942544/6300978111", // TODO: replace before release
+  INTERSTITIAL_AD_UNIT_ID:"ca-app-pub-3940256099942544/1033173712",// TODO: replace before release
+  REWARDED_AD_UNIT_ID:   "ca-app-pub-3940256099942544/5224354917", // TODO: replace before release
+  ADS_ENABLED: true,            // master kill-switch for all ad code
+  ADS_TESTING_MODE: true,       // requests test ads; set false for release
+  ADS_INTERSTITIAL_EVERY_N_DEATHS: 3, // ⚖ revenue-vs-retention knob #1
+  ADS_INTERSTITIAL_MIN_INTERVAL_S: 60,// never two interstitials within 60s
+  REWARDED_DOUBLE_XP_MULT: 2,   // ⚖ revenue-vs-retention knob #2
+
+  /* ── XP / LEVELS (endless: cost = BASE_XP · level^EXPONENT) ───────── */
+  BASE_XP: 90,
+  XP_LEVEL_EXPONENT: 1.5,
+  XP_PER_POINT: 10,             // run score → XP conversion
+  REBIRTH_LEVEL: 50,            // rebirth offered at/after this level
+  REBIRTH_MULT_GAIN: 0.5,       // each rebirth: +0.5× permanent XP gain
+  STREAK_BONUS_PER_DAY: 0.10,   // +10% XP per streak day…
+  STREAK_BONUS_CAP: 1.0,        // …capped at +100%
+  STREAK_DAILY_XP: 40,          // instant XP on first launch of the day × streak
+
+  /* ── DIFFICULTY — smooth functions of rings-passed n and level L.
+        No tiers: level 3 and level 300 use the same math, chaos clamped. */
+  /* n is RINGS PASSED this run (not score), so combo points no longer
+     speed the game up — playing well isn't punished. */
+  EASY_RINGS: 5,                // first N rings: static, big, no flips
+  ORBIT_SPEED_BASE: 1.85,       // rad/s at n=0            ★ addictiveness knob
+  ORBIT_SPEED_GROWTH: 0.045,    // + per ring passed        ★ addictiveness knob
+  ORBIT_SPEED_LEVEL: 0.018,     // + ·√L (veterans start a touch faster)
+  ORBIT_SPEED_MAX: 4.6,         // CLAMP: playable forever
+  FLY_SPEED: 760,               // px/s (in 480-wide virtual units)
+  ORBIT_GAP: 26,                // dot's orbit sits this far outside the ring
+  DOT_R: 9,
+
+  TARGET_R_BASE: 56,            // ring radius at n=0
+  TARGET_R_SHRINK: 2.6,         // − ·√n
+  TARGET_R_LEVEL: 0.5,          // − ·√L
+  TARGET_R_MIN: 30,             // CLAMP ★ addictiveness knob
+  TARGET_DIST_MIN: 170,         // spawn distance range from current ring
+  TARGET_DIST_MAX: 250,
+  TARGET_CONE_DEG: 52,          // spawn direction: up ± this many degrees
+
+  FLIP_START_N: 6,              // rotation may flip after this many rings
+  FLIP_CHANCE_GROWTH: 0.012,    // + per ring past start
+  FLIP_CHANCE_LEVEL: 0.002,     // + per level
+  FLIP_CHANCE_MAX: 0.35,        // CLAMP ★ addictiveness knob
+
+  MOVE_START_N: 8,              // targets start moving after this many rings
+  MOVE_AMP_GROWTH: 2.2,         // px amplitude per ring past start
+  MOVE_AMP_MAX: 46,             // CLAMP
+  MOVE_SPEED_BASE: 1.1,         // rad/s oscillation
+  MOVE_SPEED_MAX: 2.2,          // CLAMP
+
+  /* ── SCORING / FEEL ───────────────────────────────────────────────── */
+  PERFECT_FRACTION: 0.55,       // hit within r·this = PERFECT ★ knob (was 0.38)
+  PERFECT_FRACTION_EARLY: 0.68, // even friendlier during the EASY_RINGS warm-up
+  COMBO_BREAK_STEP: 2,          // a plain landing drops the combo by this (not to 1)
+  FREE_SAVES_PER_RUN: 1,        // first miss each run bounces you back ("SAVED!")
+  COMBO_MAX: 8,                 // multiplier cap
+  NEAR_MISS_SHOW_PX: 30,        // show "missed by N px" up to this ★ knob
+  DEATH_SLOWMO_S: 0.45,         // brief flight after a miss before game over
+  NEAR_MISS_SLOWMO_S: 0.9,      // longer slow-mo when it was a near miss
+
+  /* ── JUICE — feedback intensity. Pure presentation: none of these
+        touch hit detection, scoring or difficulty. ──────────────────── */
+  JUICE_HITSTOP_S: 0.045,       // sim freeze on a PERFECT (×1.6 at combo 5+)
+  JUICE_PUNCH_ZOOM: 0.045,      // camera zoom-in on a PERFECT
+  JUICE_FEVER_COMBO: 5,         // combo at which FEVER visuals kick in
+  // praise words (GREAT! … LEGENDARY!) are per-language: see STR.*.words
+
+  /* ── COINS / SHOP ─────────────────────────────────────────────────── */
+  COINS_PER_SCORE: 1,           // coins per score point at run end ★ tune this first
+  COINS_COMBO_BONUS: 2,         // extra coins per PERFECT hit landed
+  COIN_PRICE_BASE: 90,          // tier-1 shop item price
+  COIN_PRICE_EXPONENT: 1.35,    // price of tier i = BASE · i^EXP (endless tiers)
+
+  /* ── COIN REVIVE (no lives meter — restart is always free/instant).
+        Price escalates per use WITHIN one run so it can't be spammed. ── */
+  REVIVE_COIN_BASE: 60,         // first coin-revive of a run
+  REVIVE_COIN_GROWTH: 3,        // ×3 for each additional revive in the same run
+
+  /* ── RELEASE INDICATOR — long for onboarding, shrinks smoothly with
+        level to a floor. Independent of TARGET_R_MIN by design. ─────── */
+  INDICATOR_LEN_BASE: 68,       // tangent aim-line length at level 1
+  INDICATOR_LEN_MIN: 14,        // floor — never fully disappears
+  INDICATOR_SHRINK: 3.5,        // shrink ·√(level−1) between BASE and MIN
+
+  /* ── TRAFFIC-LIGHT ASSIST — the NEXT ring's edge tints by what a
+        release RIGHT NOW would score. Derived from classifyShot(), the
+        same function the capture code scores with — green is a
+        guaranteed perfect, never a cosmetic approximation. ──────────── */
+  TRAFFIC_LIGHT_ASSIST: true,
+
+  /* ── IN-APP PURCHASES (Google Play Billing) ───────────────────────
+        Plugin: @capgo/native-purchases PINNED to 7.19.3 in package.json
+        (Capacitor-7 line, matching the AdMob pin). All product IDs are
+        placeholders — create matching products in Play Console →
+        Monetize → In-app products, then replace. */
+  IAP_ENABLED: true,            // master kill-switch for all billing code
+  IAP_COIN_PACKS: [             // consumables — repeat-purchasable
+    { productId:"orbit_rush_coins_small", coins:  500, label:"Small"  }, // TODO: replace with real product ID before release
+    { productId:"orbit_rush_coins_medium",coins: 1500, label:"Medium" }, // TODO: replace with real product ID before release
+    { productId:"orbit_rush_coins_large", coins: 4000, label:"Large"  }, // TODO: replace with real product ID before release
+    { productId:"orbit_rush_coins_mega",  coins:12000, label:"Mega"   }, // TODO: replace with real product ID before release
+  ],
+  IAP_REMOVE_ADS_PRODUCT_ID: "orbit_rush_remove_ads", // non-consumable  // TODO: replace with real product ID before release
+
+  /* ── PERFORMANCE / FX ─────────────────────────────────────────────── */
+  DPR_CAP: 2,                   // cap devicePixelRatio for cheap GPUs
+  PARTICLE_POOL: 160,           // fixed pool, zero per-frame allocation
+  SHAKE_MAX: 9,                 // px screen shake at full strength
+  VIRTUAL_W: 480,               // design width; world scales to real width
+  VIRTUAL_MIN_H: 720,           // min visible height (landscape/tablet fit)
+
+  /* ── UNLOCKS: cost of the i-th item (lifetime XP, i from 0) ───────── */
+  UNLOCK_BASE: 350,
+  UNLOCK_EXPONENT: 1.7,
+
+  SAVE_KEY: "orbitRush.save.v1",
+};
+/* ═══════════════ END CONFIG — code below, knobs above ═══════════════ */
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   I18N — every player-facing string, per language. To add a language:
+   copy the "en" block, translate the values, add its code to Lang.LIST
+   (and its native name to Lang.NAMES). Missing keys fall back to English,
+   so a half-translated language never shows blanks.
+   Item / title names (Sunburst, Neon Drift, …) are brand-style names and
+   stay as-is in every language.
+   ═══════════════════════════════════════════════════════════════════════ */
+const STR={
+en:{
+  tagline:"tap to release · land in the next ring", best:"BEST", best_lower:"best", streak:"STREAK", coins:"coins", lvl:"LVL",
+  play:"PLAY", shop:"Shop", fx_hi:"✨ FX: HI", fx_lo:"✨ FX: LO", music_on:"🎵 ON", music_off:"🎵 OFF",
+  rebirth_btn:"🌀 REBIRTH — permanent XP boost", rebirth_confirm:"🌀 Reset to Lv1, keep unlocks, gain ×{m} XP forever — tap again!",
+  privacy:"Privacy & ad options", cont:"CONTINUE", watch_ad_once:"watch ad · once", watch_ad:"watch ad", double_xp:"2× XP",
+  play_again:"TAP TO PLAY AGAIN", home:"Home", paused:"PAUSED", resume:"RESUME", restart:"Restart",
+  shop_title:"SHOP", lifetime_xp:"lifetime XP", tab_colors:"Colors", tab_skins:"Skins", tab_worlds:"Worlds", tab_sound:"Sound", tab_fx:"FX",
+  shop_help:"XP unlocks a tier · coins buy it. Tap an owned item to equip (sound & FX preview on tap). New styles generate forever.", back:"Back",
+  new_in_shop:"✦ NEW IN SHOP — {name} tier available!", mission_done:"✔ MISSION — {txt} · +{xp} XP",
+  lvl_100:"⭐ {title} — LEVEL {n}! ⭐", lvl_25:"✨ {title} — level {n}!", lvl_10:"{title} — level {n}",
+  streak_toast:"🔥 Day {n} streak — +{xp} XP!", rebirth_done:"🌀 REBIRTH {n} — permanent ×{m} XP!",
+  coin_revive:"🪙 −{n} — RUN CONTINUES!", run_continues:"🎁 RUN CONTINUES!", bonus_xp:"🎁 +{n} bonus XP!",
+  privacy_web:"Ad privacy options appear here in the Android build", iap_web:"Purchases work in the Android build",
+  restore_web:"Restore works in the Android build", no_restore:"No purchases to restore", coins_added:"🪙 +{n} coins!",
+  ads_removed_toast:"✔ Ads removed — thank you!", locked:"⭐ Unlocks at {cost} lifetime XP — you have {xp}. Coins buy it once unlocked.",
+  need_more:"Need 🪙{n} more for {name}", tap_buy:"{name} — 🪙{n}. Tap again to buy", equipped:"✦ {name} — equipped!",
+  tap_buy_cell:"tap = buy!", new_badge:"NEW", pack_small:"Small", pack_medium:"Medium", pack_large:"Large", pack_mega:"Mega",
+  ads_removed:"✔ Ads removed", thanks:"thank you!", remove_ads:"🚫 Remove Ads", remove_ads_desc:"banner + interstitial",
+  remove_ads_note:"rewarded bonuses stay", restore:"↻ Restore purchases",
+  perfect:"PERFECT ×{n}", clipped:"clipped it! +1", combo_kept:"+1 · combo ×{n} kept", flip:"FLIP", fever:"🔥 FEVER",
+  free_save:"🛡 free save used", say_new_best:"NEW BEST!", saved:"SAVED!", so_close:"SO CLOSE!",
+  combo:"COMBO ×{n}", next:"next ▸ {n}",
+  head_new_best:"★ NEW BEST! ★", head_first:"★ FIRST SCORE! ★", head_tied:"TIED YOUR BEST!", head_only:"Only {n} from your best!",
+  head_calm:"Best {n} — you've got this", missed_by:"missed by {n}px",
+  m_score:"Score {n} in one run", m_perfectRow:"{n} PERFECTs in a row", m_rings:"Pass {n} rings (total)", m_runs:"Play {n} runs",
+  m_level:"Reach level {n}", m_rebirth_once:"Rebirth once", m_rebirth_again:"Rebirth again",
+  words:["","","GREAT!","AWESOME!","AMAZING!","INCREDIBLE!","UNSTOPPABLE!","LEGENDARY!"],
+},
+es:{
+  tagline:"toca para soltar · aterriza en el siguiente anillo", best:"RÉCORD", best_lower:"récord", streak:"RACHA", coins:"monedas", lvl:"NIV",
+  play:"JUGAR", shop:"Tienda", fx_hi:"✨ FX: ALTO", fx_lo:"✨ FX: BAJO", music_on:"🎵 SÍ", music_off:"🎵 NO",
+  rebirth_btn:"🌀 RENACER — bonus de XP permanente", rebirth_confirm:"🌀 Vuelve al Nv1, conserva lo desbloqueado y gana ×{m} XP para siempre — ¡toca otra vez!",
+  privacy:"Privacidad y anuncios", cont:"CONTINUAR", watch_ad_once:"ver anuncio · 1 vez", watch_ad:"ver anuncio", double_xp:"2× XP",
+  play_again:"TOCA PARA JUGAR", home:"Inicio", paused:"PAUSA", resume:"SEGUIR", restart:"Reiniciar",
+  shop_title:"TIENDA", lifetime_xp:"XP total", tab_colors:"Colores", tab_skins:"Aspectos", tab_worlds:"Mundos", tab_sound:"Sonido", tab_fx:"FX",
+  shop_help:"La XP desbloquea un nivel · las monedas lo compran. Toca algo tuyo para equiparlo (sonido y FX se prueban al tocar). Siempre hay estilos nuevos.", back:"Volver",
+  new_in_shop:"✦ NUEVO EN LA TIENDA — ¡nivel {name} disponible!", mission_done:"✔ MISIÓN — {txt} · +{xp} XP",
+  lvl_100:"⭐ {title} — ¡NIVEL {n}! ⭐", lvl_25:"✨ {title} — ¡nivel {n}!", lvl_10:"{title} — nivel {n}",
+  streak_toast:"🔥 ¡Racha: día {n} — +{xp} XP!", rebirth_done:"🌀 RENACER {n} — ¡×{m} XP permanente!",
+  coin_revive:"🪙 −{n} — ¡LA PARTIDA SIGUE!", run_continues:"🎁 ¡LA PARTIDA SIGUE!", bonus_xp:"🎁 ¡+{n} XP de bonus!",
+  privacy_web:"Las opciones de privacidad de anuncios están en la versión de Android", iap_web:"Las compras funcionan en la versión de Android",
+  restore_web:"Restaurar funciona en la versión de Android", no_restore:"No hay compras para restaurar", coins_added:"🪙 ¡+{n} monedas!",
+  ads_removed_toast:"✔ Anuncios quitados — ¡gracias!", locked:"⭐ Se desbloquea con {cost} XP total — tienes {xp}. Luego se compra con monedas.",
+  need_more:"Te faltan 🪙{n} para {name}", tap_buy:"{name} — 🪙{n}. Toca otra vez para comprar", equipped:"✦ ¡{name} equipado!",
+  tap_buy_cell:"¡toca y compra!", new_badge:"NUEVO", pack_small:"Pequeño", pack_medium:"Mediano", pack_large:"Grande", pack_mega:"Mega",
+  ads_removed:"✔ Sin anuncios", thanks:"¡gracias!", remove_ads:"🚫 Quitar anuncios", remove_ads_desc:"banner + intersticial",
+  remove_ads_note:"los bonus por anuncio siguen", restore:"↻ Restaurar compras",
+  perfect:"¡PERFECTO! ×{n}", clipped:"¡por poco! +1", combo_kept:"+1 · combo ×{n} a salvo", flip:"GIRO", fever:"🔥 FIEBRE",
+  free_save:"🛡 rescate gratis usado", say_new_best:"¡NUEVO RÉCORD!", saved:"¡SALVADO!", so_close:"¡CASI!",
+  combo:"COMBO ×{n}", next:"meta ▸ {n}",
+  head_new_best:"★ ¡NUEVO RÉCORD! ★", head_first:"★ ¡PRIMERA PUNTUACIÓN! ★", head_tied:"¡IGUALASTE TU RÉCORD!", head_only:"¡A solo {n} de tu récord!",
+  head_calm:"Récord {n} — tú puedes", missed_by:"fallaste por {n}px",
+  m_score:"Haz {n} puntos en una partida", m_perfectRow:"{n} PERFECTOS seguidos", m_rings:"Pasa {n} anillos (en total)", m_runs:"Juega {n} partidas",
+  m_level:"Llega al nivel {n}", m_rebirth_once:"Renace una vez", m_rebirth_again:"Renace otra vez",
+  words:["","","¡GENIAL!","¡TREMENDO!","¡INCREÍBLE!","¡BRUTAL!","¡IMPARABLE!","¡LEGENDARIO!"],
+},
+"pt-BR":{
+  tagline:"toque para soltar · caia no próximo anel", best:"RECORDE", best_lower:"recorde", streak:"SEQUÊNCIA", coins:"moedas", lvl:"NV",
+  play:"JOGAR", shop:"Loja", fx_hi:"✨ FX: ALTO", fx_lo:"✨ FX: BAIXO", music_on:"🎵 LIGA", music_off:"🎵 DESL",
+  rebirth_btn:"🌀 RENASCER — bônus de XP permanente", rebirth_confirm:"🌀 Volte ao Nv1, mantenha o que desbloqueou e ganhe ×{m} XP para sempre — toque de novo!",
+  privacy:"Privacidade e anúncios", cont:"CONTINUAR", watch_ad_once:"ver anúncio · 1 vez", watch_ad:"ver anúncio", double_xp:"2× XP",
+  play_again:"TOQUE PARA JOGAR", home:"Início", paused:"PAUSADO", resume:"VOLTAR", restart:"Reiniciar",
+  shop_title:"LOJA", lifetime_xp:"XP total", tab_colors:"Cores", tab_skins:"Visuais", tab_worlds:"Mundos", tab_sound:"Som", tab_fx:"FX",
+  shop_help:"XP libera um nível · moedas compram. Toque em um item seu para equipar (som e FX tocam uma prévia). Sempre surgem estilos novos.", back:"Voltar",
+  new_in_shop:"✦ NOVIDADE NA LOJA — nível {name} liberado!", mission_done:"✔ MISSÃO — {txt} · +{xp} XP",
+  lvl_100:"⭐ {title} — NÍVEL {n}! ⭐", lvl_25:"✨ {title} — nível {n}!", lvl_10:"{title} — nível {n}",
+  streak_toast:"🔥 Sequência: dia {n} — +{xp} XP!", rebirth_done:"🌀 RENASCER {n} — ×{m} XP para sempre!",
+  coin_revive:"🪙 −{n} — A PARTIDA CONTINUA!", run_continues:"🎁 A PARTIDA CONTINUA!", bonus_xp:"🎁 +{n} XP de bônus!",
+  privacy_web:"As opções de privacidade de anúncios ficam na versão Android", iap_web:"Compras funcionam na versão Android",
+  restore_web:"Restaurar funciona na versão Android", no_restore:"Nenhuma compra para restaurar", coins_added:"🪙 +{n} moedas!",
+  ads_removed_toast:"✔ Anúncios removidos — valeu!", locked:"⭐ Libera com {cost} de XP total — você tem {xp}. Depois é só comprar com moedas.",
+  need_more:"Faltam 🪙{n} para {name}", tap_buy:"{name} — 🪙{n}. Toque de novo para comprar", equipped:"✦ {name} — equipado!",
+  tap_buy_cell:"toque = comprar!", new_badge:"NOVO", pack_small:"Pequeno", pack_medium:"Médio", pack_large:"Grande", pack_mega:"Mega",
+  ads_removed:"✔ Sem anúncios", thanks:"valeu!", remove_ads:"🚫 Remover anúncios", remove_ads_desc:"banner + intersticial",
+  remove_ads_note:"bônus com anúncio continuam", restore:"↻ Restaurar compras",
+  perfect:"PERFEITO ×{n}", clipped:"raspou! +1", combo_kept:"+1 · combo ×{n} mantido", flip:"VIRADA", fever:"🔥 FEBRE",
+  free_save:"🛡 salvamento grátis usado", say_new_best:"NOVO RECORDE!", saved:"SALVO!", so_close:"QUASE!",
+  combo:"COMBO ×{n}", next:"meta ▸ {n}",
+  head_new_best:"★ NOVO RECORDE! ★", head_first:"★ PRIMEIRA PONTUAÇÃO! ★", head_tied:"EMPATOU SEU RECORDE!", head_only:"Só {n} do seu recorde!",
+  head_calm:"Recorde {n} — você consegue", missed_by:"errou por {n}px",
+  m_score:"Faça {n} pontos numa partida", m_perfectRow:"{n} PERFEITOS seguidos", m_rings:"Passe {n} anéis (no total)", m_runs:"Jogue {n} partidas",
+  m_level:"Chegue ao nível {n}", m_rebirth_once:"Renasça uma vez", m_rebirth_again:"Renasça de novo",
+  words:["","","ÓTIMO!","DEMAIS!","INCRÍVEL!","SENSACIONAL!","IMPARÁVEL!","LENDÁRIO!"],
+},
+id:{
+  tagline:"ketuk untuk melepas · mendarat di cincin berikutnya", best:"TERBAIK", best_lower:"terbaik", streak:"BERUNTUN", coins:"koin", lvl:"LV",
+  play:"MAIN", shop:"Toko", fx_hi:"✨ FX: TINGGI", fx_lo:"✨ FX: RENDAH", music_on:"🎵 NYALA", music_off:"🎵 MATI",
+  rebirth_btn:"🌀 LAHIR ULANG — bonus XP permanen", rebirth_confirm:"🌀 Kembali ke Lv1, item tetap tersimpan, dapat ×{m} XP selamanya — ketuk lagi!",
+  privacy:"Privasi & iklan", cont:"LANJUT", watch_ad_once:"tonton iklan · 1x", watch_ad:"tonton iklan", double_xp:"2× XP",
+  play_again:"KETUK UNTUK MAIN LAGI", home:"Beranda", paused:"JEDA", resume:"LANJUT", restart:"Ulang",
+  shop_title:"TOKO", lifetime_xp:"total XP", tab_colors:"Warna", tab_skins:"Skin", tab_worlds:"Dunia", tab_sound:"Suara", tab_fx:"FX",
+  shop_help:"XP membuka tingkat · koin untuk membeli. Ketuk item milikmu untuk memakai (suara & FX bisa dicoba). Gaya baru terus bermunculan.", back:"Kembali",
+  new_in_shop:"✦ BARU DI TOKO — tingkat {name} tersedia!", mission_done:"✔ MISI — {txt} · +{xp} XP",
+  lvl_100:"⭐ {title} — LEVEL {n}! ⭐", lvl_25:"✨ {title} — level {n}!", lvl_10:"{title} — level {n}",
+  streak_toast:"🔥 Beruntun hari ke-{n} — +{xp} XP!", rebirth_done:"🌀 LAHIR ULANG {n} — ×{m} XP permanen!",
+  coin_revive:"🪙 −{n} — PERMAINAN LANJUT!", run_continues:"🎁 PERMAINAN LANJUT!", bonus_xp:"🎁 Bonus +{n} XP!",
+  privacy_web:"Opsi privasi iklan ada di versi Android", iap_web:"Pembelian berfungsi di versi Android",
+  restore_web:"Pemulihan berfungsi di versi Android", no_restore:"Tidak ada pembelian untuk dipulihkan", coins_added:"🪙 +{n} koin!",
+  ads_removed_toast:"✔ Iklan dihapus — terima kasih!", locked:"⭐ Terbuka di {cost} total XP — kamu punya {xp}. Setelah itu beli dengan koin.",
+  need_more:"Kurang 🪙{n} untuk {name}", tap_buy:"{name} — 🪙{n}. Ketuk lagi untuk beli", equipped:"✦ {name} — dipakai!",
+  tap_buy_cell:"ketuk = beli!", new_badge:"BARU", pack_small:"Kecil", pack_medium:"Sedang", pack_large:"Besar", pack_mega:"Mega",
+  ads_removed:"✔ Tanpa iklan", thanks:"terima kasih!", remove_ads:"🚫 Hapus Iklan", remove_ads_desc:"banner + interstisial",
+  remove_ads_note:"bonus dari iklan tetap ada", restore:"↻ Pulihkan pembelian",
+  perfect:"SEMPURNA ×{n}", clipped:"nyaris! +1", combo_kept:"+1 · kombo ×{n} aman", flip:"BALIK", fever:"🔥 DEMAM",
+  free_save:"🛡 penyelamat gratis terpakai", say_new_best:"REKOR BARU!", saved:"SELAMAT!", so_close:"DIKIT LAGI!",
+  combo:"KOMBO ×{n}", next:"target ▸ {n}",
+  head_new_best:"★ REKOR BARU! ★", head_first:"★ SKOR PERTAMA! ★", head_tied:"SAMA DENGAN REKORMU!", head_only:"Tinggal {n} lagi ke rekormu!",
+  head_calm:"Terbaik {n} — kamu pasti bisa", missed_by:"meleset {n}px",
+  m_score:"Raih {n} poin dalam satu main", m_perfectRow:"{n} SEMPURNA beruntun", m_rings:"Lewati {n} cincin (total)", m_runs:"Main {n} kali",
+  m_level:"Capai level {n}", m_rebirth_once:"Lahir ulang sekali", m_rebirth_again:"Lahir ulang lagi",
+  words:["","","MANTAP!","KEREN!","LUAR BIASA!","GOKIL!","TAK TERBENDUNG!","LEGENDARIS!"],
+},
+fil:{
+  tagline:"i-tap para bitawan · lumapag sa susunod na singsing", best:"RECORD", best_lower:"record", streak:"SUNOD-SUNOD", coins:"barya", lvl:"LVL",
+  play:"LARO", shop:"Tindahan", fx_hi:"✨ FX: MATAAS", fx_lo:"✨ FX: MABABA", music_on:"🎵 BUKAS", music_off:"🎵 SARADO",
+  rebirth_btn:"🌀 ISILANG MULI — permanenteng dagdag XP", rebirth_confirm:"🌀 Balik sa Lv1, maiiwan ang mga na-unlock, ×{m} XP habambuhay — i-tap ulit!",
+  privacy:"Privacy at mga ad", cont:"ITULOY", watch_ad_once:"manood ng ad · 1 beses", watch_ad:"manood ng ad", double_xp:"2× XP",
+  play_again:"I-TAP PARA MAGLARO ULIT", home:"Home", paused:"NAKA-PAUSE", resume:"ITULOY", restart:"Ulitin",
+  shop_title:"TINDAHAN", lifetime_xp:"kabuuang XP", tab_colors:"Kulay", tab_skins:"Skin", tab_worlds:"Mundo", tab_sound:"Tunog", tab_fx:"FX",
+  shop_help:"Binubuksan ng XP ang isang tier · binibili ito ng barya. I-tap ang sarili mong item para gamitin (may preview ang tunog at FX). Laging may bagong estilo.", back:"Bumalik",
+  new_in_shop:"✦ BAGO SA TINDAHAN — bukas na ang tier na {name}!", mission_done:"✔ MISYON — {txt} · +{xp} XP",
+  lvl_100:"⭐ {title} — LEVEL {n}! ⭐", lvl_25:"✨ {title} — level {n}!", lvl_10:"{title} — level {n}",
+  streak_toast:"🔥 Ika-{n} araw na sunod-sunod — +{xp} XP!", rebirth_done:"🌀 ISILANG MULI {n} — ×{m} XP habambuhay!",
+  coin_revive:"🪙 −{n} — TULOY ANG LARO!", run_continues:"🎁 TULOY ANG LARO!", bonus_xp:"🎁 +{n} bonus XP!",
+  privacy_web:"Nasa Android na bersyon ang mga opsyon sa privacy ng ad", iap_web:"Gumagana ang pagbili sa Android na bersyon",
+  restore_web:"Gumagana ang pag-restore sa Android na bersyon", no_restore:"Walang mare-restore na binili", coins_added:"🪙 +{n} barya!",
+  ads_removed_toast:"✔ Wala nang ad — salamat!", locked:"⭐ Mabubuksan sa {cost} kabuuang XP — may {xp} ka. Bilhin gamit ang barya pagkatapos.",
+  need_more:"Kulang ka ng 🪙{n} para sa {name}", tap_buy:"{name} — 🪙{n}. I-tap ulit para bilhin", equipped:"✦ {name} — gamit na!",
+  tap_buy_cell:"tap = bili!", new_badge:"BAGO", pack_small:"Maliit", pack_medium:"Katamtaman", pack_large:"Malaki", pack_mega:"Mega",
+  ads_removed:"✔ Wala nang ad", thanks:"salamat!", remove_ads:"🚫 Alisin ang Ads", remove_ads_desc:"banner + interstitial",
+  remove_ads_note:"tuloy pa rin ang reward ads", restore:"↻ I-restore ang binili",
+  perfect:"PERPEKTO ×{n}", clipped:"muntik na! +1", combo_kept:"+1 · combo ×{n} buo pa", flip:"BALIKTAD", fever:"🔥 LAGNAT",
+  free_save:"🛡 nagamit ang libreng sagip", say_new_best:"BAGONG RECORD!", saved:"NASAGIP!", so_close:"MUNTIK NA!",
+  combo:"COMBO ×{n}", next:"susunod ▸ {n}",
+  head_new_best:"★ BAGONG RECORD! ★", head_first:"★ UNANG ISKOR! ★", head_tied:"KAPANTAY NG RECORD MO!", head_only:"{n} na lang sa record mo!",
+  head_calm:"Record {n} — kaya mo 'yan", missed_by:"sablay ng {n}px",
+  m_score:"Makakuha ng {n} puntos sa isang laro", m_perfectRow:"{n} PERPEKTO nang sunod-sunod", m_rings:"Lampasan ang {n} singsing (kabuuan)", m_runs:"Maglaro nang {n} beses",
+  m_level:"Umabot sa level {n}", m_rebirth_once:"Isilang muli nang isang beses", m_rebirth_again:"Isilang muli ulit",
+  words:["","","GALING!","ASTIG!","ANG LUPET!","GRABE!","DI MAPIGILAN!","ALAMAT!"],
+},
+};
+/* language selection: ?lang= link (from the ETS site) > player's choice in
+   the game > the ETS site's saved choice (same-origin only) > device > en */
+const Lang={
+  LIST:["en","es","pt-BR","id","fil"],
+  NAMES:{en:"English",es:"Español","pt-BR":"Português",id:"Indonesia",fil:"Filipino"},
+  cur:"en",
+  norm(code){
+    if(!code) return null;
+    const c=String(code).trim().replace("_","-").toLowerCase();
+    if(c.startsWith("pt")) return "pt-BR";
+    if(c.startsWith("es")) return "es";
+    if(c==="id"||c==="in"||c.startsWith("id-")||c.startsWith("in-")) return "id";
+    if(c.startsWith("fil")||c==="tl"||c.startsWith("tl-")) return "fil";
+    if(c.startsWith("en")) return "en";
+    return null;
+  },
+  init(){
+    let fromUrl=null;
+    try{ fromUrl=this.norm(new URLSearchParams(location.search).get("lang")); }catch(e){}
+    if(fromUrl) S.lang=fromUrl;                       // a link from the site wins, and sticks
+    let site=null; try{ site=this.norm(localStorage.getItem("ets.lang")); }catch(e){}
+    let dev=null;
+    for(const l of (navigator.languages||[navigator.language])){ dev=this.norm(l); if(dev) break; }
+    this.cur=fromUrl||this.norm(S.lang)||site||dev||"en";
+    document.documentElement.lang=this.cur;
+  },
+  set(code){ this.cur=code; S.lang=code; save(); document.documentElement.lang=code; UI.applyLang(); },
+  next(){ const i=this.LIST.indexOf(this.cur); this.set(this.LIST[(i+1)%this.LIST.length]); },
+};
+/* tr("key",{n:3}) → translated string with {placeholders} filled */
+function tr(key,vars){
+  const s=(STR[Lang.cur]&&STR[Lang.cur][key])??STR.en[key]??key;
+  if(!vars||typeof s!=="string") return s;
+  return s.replace(/\{(\w+)\}/g,(m,k)=>vars[k]!==undefined?vars[k]:m);
+}
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════════════════ */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=(a,b)=>a+Math.random()*(b-a);
+const TAU=Math.PI*2;
+/* Deterministic hash → [0,1). Used to procedurally generate unlock styles,
+   milestone titles etc. so they're stable across sessions with no data. */
+function hash01(n){let x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+const $=id=>document.getElementById(id);
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAVE / LOAD — everything persists in one localStorage JSON blob.
+   ═══════════════════════════════════════════════════════════════════════ */
+const DEFAULT_SAVE={
+  v:1,
+  level:1, xpInLevel:0,        // current level + progress into it
+  lifetimeXP:0,                // never resets (drives unlocks)
+  rebirths:0,                  // permanent XP multiplier count
+  best:0, lastRun:0,
+  runsPlayed:0, ringsTotal:0, perfectsTotal:0,
+  deaths:0,                    // interstitial cadence counter
+  streak:0, lastDay:"",        // daily streak
+  missions:[],                 // active missions (see Missions)
+  missionSeed:1,               // monotonically increasing mission generator seed
+  coins:0,                     // spendable currency (earned per run)
+  removeAds:false,             // non-consumable IAP: banner+interstitial off
+  /* item 0 of every category is free & pre-owned */
+  owned:{trail:[0],skin:[0],bg:[0],sound:[0],fx:[0]},
+  equip:{trail:0,skin:0,bg:0,sound:0,fx:0},
+  shopSeen:{trail:1,skin:1,bg:1,sound:1,fx:1}, // per-category count seen → NEW badges
+  muted:false, lowFX:false, musicOn:true,
+  lang:"",                     // "" = follow ?lang= link / ETS site / device
+  consentDone:false,
+};
+const SHOP_CATS=["trail","skin","bg","sound","fx"];
+let S=loadSave();
+function loadSave(){
+  try{
+    const raw=localStorage.getItem(CONFIG.SAVE_KEY);
+    if(!raw) return structuredClone(DEFAULT_SAVE);
+    // Merge over defaults so adding fields in updates never breaks old saves.
+    const s=Object.assign(structuredClone(DEFAULT_SAVE), JSON.parse(raw));
+    // nested objects need their own merge (a shallow assign would drop
+    // newly added categories like sound/fx from pre-shop saves)
+    for(const k of ["owned","equip","shopSeen"])
+      s[k]=Object.assign(structuredClone(DEFAULT_SAVE[k]), s[k]||{});
+    // never leave an un-owned item equipped
+    for(const c of SHOP_CATS) if(!s.owned[c].includes(s.equip[c])) s.equip[c]=0;
+    return s;
+  }catch(e){ console.warn("[save] corrupt, resetting", e); return structuredClone(DEFAULT_SAVE); }
+}
+let saveQueued=false;
+function save(){ // micro-batched: many systems call save(); write once per frame
+  if(saveQueued) return; saveQueued=true;
+  setTimeout(()=>{ saveQueued=false;
+    try{ localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(S)); }
+    catch(e){ console.warn("[save] write failed", e); }
+  },0);
+}
+
+/* XP cost of a given level — endless curve, never plateaus. */
+const xpForLevel=l=>Math.round(CONFIG.BASE_XP*Math.pow(l,CONFIG.XP_LEVEL_EXPONENT));
+/* Total permanent XP-gain multiplier (rebirth + streak). */
+function xpMult(){
+  const streakBonus=Math.min(CONFIG.STREAK_BONUS_CAP, S.streak*CONFIG.STREAK_BONUS_PER_DAY);
+  return (1+S.rebirths*CONFIG.REBIRTH_MULT_GAIN)*(1+streakBonus);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AUDIO — 100% procedural Web Audio, no files. Context is created lazily
+   on the first user gesture (mobile autoplay policy), suspended on pause.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Audio2={
+  ctx:null, master:null,
+  ensure(){
+    if(S.muted) return null;
+    if(!this.ctx){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC) return null;
+      this.ctx=new AC();
+      this.master=this.ctx.createGain();
+      this.master.gain.value=0.5;
+      this.master.connect(this.ctx.destination);
+    }
+    if(this.ctx.state==="suspended") this.ctx.resume();
+    return this.ctx;
+  },
+  suspend(){ if(this.ctx&&this.ctx.state==="running") this.ctx.suspend(); },
+  /* iOS WebKit only fully unlocks output once a sound actually starts
+     inside a gesture — play one silent sample the first time. */
+  unlockIOS(){
+    if(this.iosUnlocked||!this.ctx) return;
+    try{ const src=this.ctx.createBufferSource(); src.buffer=this.ctx.createBuffer(1,1,22050);
+      src.connect(this.ctx.destination); src.start(0); this.iosUnlocked=true; }catch(e){}
+  },
+  /* one-shot helper: oscillator with pitch+gain envelopes */
+  blip(freq0,freq1,dur,type,vol,when=0){
+    const ctx=this.ensure(); if(!ctx) return;
+    const t=ctx.currentTime+when;
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq0,t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(freq1,1),t+dur);
+    g.gain.setValueAtTime(vol,t);
+    g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t+dur+0.02);
+  },
+  noise(dur,vol,cutoff,when=0){
+    const ctx=this.ensure(); if(!ctx) return;
+    const t=ctx.currentTime+when;
+    const n=Math.floor(ctx.sampleRate*dur);
+    const buf=ctx.createBuffer(1,n,ctx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const src=ctx.createBufferSource(); src.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type="lowpass"; f.frequency.value=cutoff;
+    const g=ctx.createGain(); g.gain.value=vol;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t);
+  },
+  /* equipped sound pack (see soundItem) drives the pluck/thunk voice */
+  pack(){ return soundItem(S.equip.sound); },
+  /* landed in a ring — weighty "thunk", pitched by the pack */
+  thunk(){
+    const p=this.pack();
+    this.noise(0.08,0.5,900);
+    this.blip(150*(p.base/523),60,0.12,"sine",0.5);
+  },
+  /* PERFECT — pluck that climbs the pack's scale with the combo:
+     the escalating-audio dopamine ramp. */
+  perfect(combo,packOverride){
+    const p=packOverride||this.pack();
+    const st=p.scale[Math.min(combo-1,p.scale.length-1)];
+    const f=p.base*Math.pow(2,st/12);
+    this.blip(f,f,0.16,p.wave,0.5);
+    this.blip(f*2,f*2,0.10,"sine",0.22,0.02);      // sparkle octave
+    if(combo>=3) this.blip(f*1.5,f*1.5,0.12,"sine",0.18,0.05);
+  },
+  /* shop preview: a short 3-note run in pack i's voice */
+  preview(i){ const p=soundItem(i); this.perfect(1,p); setTimeout(()=>this.perfect(2,p),100); setTimeout(()=>this.perfect(3,p),200); },
+  miss(){ this.blip(300,55,0.4,"sawtooth",0.35); this.noise(0.25,0.3,500,0.05); },
+  levelup(){ [0,4,7,12].forEach((st,i)=>this.blip(440*Math.pow(2,st/12),440*Math.pow(2,st/12),0.18,"triangle",0.4,i*0.07)); },
+  unlock(){ [0,5,9,12,16].forEach((st,i)=>this.blip(523*Math.pow(2,st/12),523*Math.pow(2,st/12),0.15,"square",0.15,i*0.06)); },
+  ui(){ this.blip(700,900,0.05,"sine",0.15); },
+  release(){ this.blip(220,700,0.09,"sine",0.25); },
+  /* sub-bass "boom" under PERFECTs — heavier as the combo climbs */
+  boom(combo){ this.blip(120,38,0.28,"sine",Math.min(0.75,0.35+combo*0.05)); this.noise(0.06,0.25+combo*0.03,2400); },
+  /* praise-word stinger: a bright major chord, pitched up per tier */
+  stinger(tier){ const b=392*Math.pow(2,tier/12); [0,4,7,12].forEach((st,i)=>this.blip(b*Math.pow(2,st/12),b*Math.pow(2,st/12),0.32,"triangle",0.22,i*0.025)); },
+  /* mid-run NEW BEST fanfare */
+  fanfare(){ [0,4,7,12,16,19,24].forEach((st,i)=>this.blip(523*Math.pow(2,st/12),523*Math.pow(2,st/12),0.2,"square",0.16,i*0.055)); this.boom(6); },
+  /* near-miss: a rising "ooh" so a miss feels close, not cheap */
+  soClose(){ this.blip(330,520,0.35,"triangle",0.25,0.05); },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MUSIC — original procedural soundtrack, 100% Web Audio (no files, no
+   licences). A lookahead scheduler queues 16th-notes ~120ms ahead on the
+   audio clock, so timing stays tight even when frames drop.
+   · "menu" — 100 BPM, soft pads + twinkly arp (home / game over / shop)
+   · "game" — 128 BPM four-on-the-floor; layers build with your combo:
+              combo 3+ adds a 16th-note arp, FEVER adds 16th hats and a
+              high sparkle line. Death sweeps a low-pass down (muffled).
+   Rides the same master bus as SFX, so the mute button and app-pause
+   (context suspend) cover it. Starts only after a user gesture.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Music={
+  bus:null, filter:null, noiseBuf:null,
+  song:null, want:"menu", step:0, nextT:0, timer:null,
+  VOL:0.7,
+  SONGS:{
+    menu:{bpm:100, chords:[[50,"M"],[47,"m"],[43,"M"],[45,"M"]]},   // I–vi–IV–V in D
+    game:{bpm:128, chords:[[50,"M"],[45,"M"],[47,"m"],[43,"M"]]},   // I–V–vi–IV in D
+  },
+  // two-bar lead motif: indexes into the chord's tones (-1 = rest)
+  MEL:[[0,-1,2,-1,1,-1,3,-1,2,-1,4,-1,3,-1,2,1],[3,-1,2,-1,4,-1,3,-1,5,-1,4,-1,2,-1,1,-1]],
+
+  enabled(){ return !S.muted && S.musicOn!==false; },
+  hz(m){ return 440*Math.pow(2,(m-69)/12); },
+  tones(ch){ const [r,q]=ch, t=q==="m"?3:4; return [r,r+t,r+7,r+12,r+12+t,r+19,r+24]; },
+
+  setup(ctx){
+    if(this.bus) return;
+    this.filter=ctx.createBiquadFilter(); this.filter.type="lowpass"; this.filter.frequency.value=18000;
+    this.bus=ctx.createGain(); this.bus.gain.value=0;
+    // gentle glue compressor: keeps the mix punchy and stops clipping
+    const comp=ctx.createDynamicsCompressor();
+    comp.threshold.value=-18; comp.knee.value=12; comp.ratio.value=4; comp.attack.value=0.004; comp.release.value=0.2;
+    this.filter.connect(comp); comp.connect(this.bus); this.bus.connect(Audio2.master);
+    const n=ctx.sampleRate; this.noiseBuf=ctx.createBuffer(1,n,ctx.sampleRate);
+    const d=this.noiseBuf.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  },
+
+  /* switch to a song (crossfade). Safe to call any time; no-op if muted. */
+  play(name){
+    this.want=name;
+    if(!this.enabled()){ this.stop(); return; }
+    const ctx=Audio2.ensure(); if(!ctx) return;
+    this.setup(ctx);
+    const now=ctx.currentTime, f=this.filter.frequency;
+    f.cancelScheduledValues(now); f.setValueAtTime(f.value,now); f.linearRampToValueAtTime(18000,now+0.25);
+    if(this.song===name&&this.timer) return;           // already playing: just un-muffle
+    const g=this.bus.gain;
+    g.cancelScheduledValues(now); g.setValueAtTime(g.value,now);
+    g.linearRampToValueAtTime(0,now+0.12);
+    g.linearRampToValueAtTime(this.VOL,now+0.7);
+    this.song=name; this.step=0; this.nextT=now+0.15;
+    if(!this.timer) this.timer=setInterval(()=>this.tick(),25);
+  },
+  stop(){
+    clearInterval(this.timer); this.timer=null; this.song=null;
+    const ctx=Audio2.ctx; if(!ctx||!this.bus) return;
+    const now=ctx.currentTime, g=this.bus.gain;
+    g.cancelScheduledValues(now); g.setValueAtTime(g.value,now); g.linearRampToValueAtTime(0,now+0.2);
+  },
+  /* death: muffle the track for that "oh no" moment */
+  /* death: a quick "whoomp" filter dip that springs back — the energy
+     stays up so the next run feels one tap away */
+  dip(){
+    const ctx=Audio2.ctx; if(!ctx||!this.filter) return;
+    const now=ctx.currentTime, f=this.filter.frequency;
+    f.cancelScheduledValues(now); f.setValueAtTime(f.value,now);
+    f.exponentialRampToValueAtTime(700,now+0.15); f.exponentialRampToValueAtTime(18000,now+1.1);
+  },
+
+  tick(){
+    const ctx=Audio2.ctx;
+    if(!ctx||ctx.state!=="running"||!this.song) return;
+    if(this.nextT<ctx.currentTime) this.nextT=ctx.currentTime+0.03;   // throttled-tab catch-up
+    const song=this.SONGS[this.song], dt=60/song.bpm/4;
+    while(this.nextT<ctx.currentTime+0.12){
+      this[this.song==="game"?"stepGame":"stepMenu"](this.step,this.nextT,song,dt);
+      this.nextT+=dt; this.step++;
+    }
+  },
+
+  /* ── voices (all scheduled at audio time t) ─────────────────────── */
+  osc(f,t,dur,type,vol,att=0.005){
+    const ctx=Audio2.ctx, o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t);
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+att);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(this.filter); o.start(t); o.stop(t+dur+0.02);
+  },
+  noise(t,dur,vol,type,freq,q=1){
+    const ctx=Audio2.ctx, s=ctx.createBufferSource(), fl=ctx.createBiquadFilter(), g=ctx.createGain();
+    s.buffer=this.noiseBuf; fl.type=type; fl.frequency.value=freq; fl.Q.value=q;
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    s.connect(fl); fl.connect(g); g.connect(this.filter);
+    s.start(t,Math.random()*0.5); s.stop(t+dur+0.02);
+  },
+  kick(t,vol=0.9){
+    const ctx=Audio2.ctx, o=ctx.createOscillator(), g=ctx.createGain();
+    o.type="sine"; o.frequency.setValueAtTime(165,t); o.frequency.exponentialRampToValueAtTime(45,t+0.14);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+    o.connect(g); g.connect(this.filter); o.start(t); o.stop(t+0.25);
+  },
+  bass(m,t,dur,vol=0.38){
+    const ctx=Audio2.ctx, o=ctx.createOscillator(), fl=ctx.createBiquadFilter(), g=ctx.createGain();
+    o.type="sawtooth"; o.frequency.setValueAtTime(this.hz(m),t);
+    fl.type="lowpass"; fl.frequency.setValueAtTime(900,t); fl.frequency.exponentialRampToValueAtTime(220,t+dur);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(fl); fl.connect(g); g.connect(this.filter); o.start(t); o.stop(t+dur+0.02);
+  },
+
+  /* ── arrangements ──────────────────────────────────────────────── */
+  stepGame(step,t,song,dt){
+    const s=step%16, bar=Math.floor(step/16), ch=song.chords[bar%song.chords.length], T=this.tones(ch);
+    const combo=Game.state==="playing"||Game.state==="dying"?Game.combo:1;
+    const fever=combo>=CONFIG.JUICE_FEVER_COMBO;
+    if(s%4===0) this.kick(t);
+    if(s===4||s===12) this.noise(t,0.14,0.6,"bandpass",1700,0.8);          // clap
+    if(s%4===2) this.noise(t,0.05,0.25,"highpass",7500);                    // open-ish hat
+    else if(fever&&s%2===1) this.noise(t,0.025,0.14,"highpass",9000);       // fever 16ths
+    if(s===0||s===3||s===6||s===10||s===12) this.bass(ch[0]-12,t,dt*1.8);
+    else if(s===8) this.bass(ch[0],t,dt*1.5);
+    else if(s===14) this.bass(ch[0]-5,t,dt*1.5);
+    const mi=this.MEL[bar%2][s];                                            // lead hook
+    if(mi>=0) this.osc(this.hz(T[mi]+12),t,dt*1.7,"triangle",0.24);
+    if(combo>=3) this.osc(this.hz(T[[0,1,2,3,2,1,3,4][s%8]]+24),t,dt*0.9,"square",0.08);  // arp layer
+    if(fever&&s%2===0) this.osc(this.hz(T[[3,4,5,6][(s/2)%4]]+24),t,dt*1.2,"sine",0.12);   // sparkle
+    if(s===0) for(const m of [T[0],T[1],T[2]]) this.osc(this.hz(m+12),t,dt*15,"sawtooth",0.03,0.08); // soft pad
+  },
+  stepMenu(step,t,song,dt){
+    const s=step%16, bar=Math.floor(step/16), ch=song.chords[bar%song.chords.length], T=this.tones(ch);
+    if(s===0) this.kick(t,0.45);
+    if(s===8) this.kick(t,0.3);
+    if(s%4===2) this.noise(t,0.04,0.06,"highpass",8000);
+    if(s===0) this.bass(ch[0]-12,t,dt*7,0.3);
+    if(s===0) for(const m of [T[0],T[1],T[2]]) this.osc(this.hz(m+12),t,dt*16,"triangle",0.11,0.35);  // pad
+    if(s%2===0) this.osc(this.hz(T[[0,2,4,3,5,4,2,3][(s/2)%8]]+12),t,dt*2.5,"triangle",0.17);           // arp
+    if(bar%2===1&&(s===6||s===14)) this.osc(this.hz(T[6]),t,dt*3,"sine",0.12);                           // twinkle
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HAPTICS — Capacitor Haptics when native, navigator.vibrate fallback,
+   silent no-op in a desktop browser.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Haptics={
+  plugin(){ return window.Capacitor?.Plugins?.Haptics || null; },
+  tap(){    const p=this.plugin(); if(p) p.impact({style:"LIGHT"}).catch(()=>{}); else navigator.vibrate?.(10); },
+  hit(){    const p=this.plugin(); if(p) p.impact({style:"MEDIUM"}).catch(()=>{}); else navigator.vibrate?.(20); },
+  perfect(){const p=this.plugin(); if(p) p.notification({type:"SUCCESS"}).catch(()=>{}); else navigator.vibrate?.([15,30,15]); },
+  death(){  const p=this.plugin(); if(p) p.vibrate({duration:120}).catch(()=>{}); else navigator.vibrate?.(120); },
+};
+
+/* Keep the screen on during a run; let it sleep in menus. */
+const Awake={
+  p(){ return window.Capacitor?.Plugins?.KeepAwake || null; },
+  on(){ this.p()?.keepAwake().catch(()=>{}); },
+  off(){ this.p()?.allowSleep().catch(()=>{}); },
+};
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   UNLOCKS — hand-authored classics first, then procedurally generated
+   forever (golden-angle hues + word-list names), so unlocks never dry up.
+   Everything is derived from the index → nothing to store but thresholds.
+   ═══════════════════════════════════════════════════════════════════════ */
+const WORDS_A=["Neon","Void","Solar","Ember","Frost","Quantum","Retro","Hyper","Lunar","Astro","Plasma","Crystal","Turbo","Phantom","Aurora","Cosmic"];
+const WORDS_B=["Drift","Pulse","Flare","Echo","Storm","Bloom","Shard","Wave","Core","Halo","Spark","Trail","Rush","Glow","Orbit","Shift"];
+function procName(i){ return WORDS_A[Math.floor(hash01(i*3+1)*WORDS_A.length)]+" "+WORDS_B[Math.floor(hash01(i*7+2)*WORDS_B.length)]; }
+function procHue(i){ return Math.round(i*137.508)%360; }   // golden angle → well-spread hues
+
+/* Bright, saturated "candy" set — every colour has to pop on the vivid
+   default worlds, so no pastels or dark tones in the hand-made tiers. */
+const HAND_TRAILS=[
+  {name:"Sunburst", c:"#ffd23f"}, {name:"Hot Pink", c:"#ff3ea5"},
+  {name:"Cyan",     c:"#00f0ff"}, {name:"Mint",     c:"#3dffb4"},
+  {name:"Tangerine",c:"#ff8a1f"}, {name:"Lime",     c:"#b6ff2e"},
+  {name:"Cherry",   c:"#ff2e4d"}, {name:"Snow",     c:"#ffffff"},
+];
+const SKIN_SHAPES=["dot","ring","square","diamond","comet","star","eye","tri"];
+const HAND_SKINS=[
+  {name:"Classic", shape:"dot",    c:"#ffffff"}, {name:"Halo",   shape:"ring",   c:"#5ef2c8"},
+  {name:"Cube",    shape:"square", c:"#ffc94d"}, {name:"Gem",    shape:"diamond",c:"#38b6ff"},
+  {name:"Comet",   shape:"comet",  c:"#ff5e8a"}, {name:"Star",   shape:"star",   c:"#fff59d"},
+  {name:"Watcher", shape:"eye",    c:"#a78bfa"}, {name:"Dart",   shape:"tri",    c:"#a3e635"},
+];
+const HAND_BGS=[
+  {name:"Hyperdrive", top:"#2f6bff", bot:"#8a3cff"}, {name:"Bubblegum", top:"#ff4fa0", bot:"#ff9a3c"},
+  {name:"Lagoon",     top:"#00b8d4", bot:"#2f6bff"}, {name:"Grape Soda",top:"#7b2cff", bot:"#ff3ea5"},
+  {name:"Jungle",     top:"#10c46b", bot:"#0a7fa8"}, {name:"Electric",  top:"#00a8ff", bot:"#6a1bff"},
+  {name:"Sunrise",    top:"#ff6a3d", bot:"#ff2e88"}, {name:"Deep Space",top:"#0b0d1a", bot:"#141a3a"}, // dark option for night play
+];
+/* Item i of a category — hand-authored if available, else generated. */
+function trailItem(i){
+  if(i<HAND_TRAILS.length) return HAND_TRAILS[i];
+  return {name:procName(i), c:`hsl(${procHue(i)} 100% 62%)`};
+}
+function skinItem(i){
+  if(i<HAND_SKINS.length) return HAND_SKINS[i];
+  return {name:procName(i+50), shape:SKIN_SHAPES[i%SKIN_SHAPES.length], c:`hsl(${procHue(i+9)} 85% 70%)`};
+}
+function bgItem(i){
+  if(i<HAND_BGS.length) return HAND_BGS[i];
+  const h=procHue(i+17);
+  return {name:procName(i+99), top:`hsl(${h} 90% 56%)`, bot:`hsl(${(h+45)%360} 85% 46%)`};
+}
+/* ── sound packs: swap the pluck/thunk voice. Hand-authored, then
+      procedural (wave/base/scale derived from the index) forever. ───── */
+const HAND_SOUNDS=[
+  {name:"Classic", wave:"triangle", base:523, scale:[0,3,5,7,10,12,15,17]},   // minor pentatonic
+  {name:"8-Bit",   wave:"square",   base:440, scale:[0,4,7,12,16,19,24,28]},  // major arps
+  {name:"Laser",   wave:"sawtooth", base:392, scale:[0,2,7,9,14,16,21,23]},   // sus2 stacks
+  {name:"Glass",   wave:"sine",     base:784, scale:[0,4,6,11,12,16,18,23]},  // lydian shimmer
+];
+const WAVES=["triangle","square","sawtooth","sine"];
+function soundItem(i){
+  if(i<HAND_SOUNDS.length) return HAND_SOUNDS[i];
+  return {name:procName(i+201), wave:WAVES[i%WAVES.length],
+    base:Math.round(330*Math.pow(2,hash01(i*11+4)*1.2)),
+    scale:HAND_SOUNDS[Math.floor(hash01(i*5+9)*HAND_SOUNDS.length)].scale};
+}
+/* ── FX packs: perfect-hit explosion variants (see Particles.perfectFX).
+      Hand-authored styles, then procedural style+hue recombinations. ── */
+const HAND_FX=[
+  {name:"Shatter",  style:"shatter"},
+  {name:"Nova",     style:"nova"},
+  {name:"Implode",  style:"implode"},
+  {name:"Confetti", style:"confetti"},
+  {name:"Quake",    style:"quake"},
+];
+function fxItem(i){
+  if(i<HAND_FX.length) return HAND_FX[i];
+  return {name:procName(i+301), style:HAND_FX[i%HAND_FX.length].style, hue:procHue(i+23)};
+}
+const CAT_ITEM={trail:trailItem,skin:skinItem,bg:bgItem,sound:soundItem,fx:fxItem};
+
+/* Lifetime-XP threshold of the i-th unlock in any category (i=0 free). */
+function unlockCost(i){ return i===0?0:Math.round(CONFIG.UNLOCK_BASE*Math.pow(i,CONFIG.UNLOCK_EXPONENT)); }
+/* Coin price of the i-th shop item — tier-scaled, endless. XP makes an
+   item AVAILABLE (unlockCost), coins BUY it (hybrid model). */
+function coinPrice(i){ return i===0?0:Math.round(CONFIG.COIN_PRICE_BASE*Math.pow(i,CONFIG.COIN_PRICE_EXPONENT)/5)*5; }
+function unlockedCount(){ // how many items per category current lifetime XP grants
+  let i=0; while(unlockCost(i+1)<=S.lifetimeXP && i<9999) i++;
+  return i+1;
+}
+/* Detect newly crossed thresholds after an XP gain → NEW UNLOCK banner. */
+function checkNewUnlocks(prevLifetime){
+  let iPrev=0; while(unlockCost(iPrev+1)<=prevLifetime) iPrev++;
+  let iNow=0;  while(unlockCost(iNow+1)<=S.lifetimeXP)  iNow++;
+  for(let i=iPrev+1;i<=iNow;i++){
+    UI.toast(tr("new_in_shop",{name:trailItem(i).name}), true);
+    Audio2.unlock(); Haptics.perfect();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MISSIONS — 3 active, procedurally generated & scaled to the player,
+   refresh automatically when completed. Progress survives restarts.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Missions={
+  TYPES:["score","perfectRow","rings","runs","level","rebirth"],
+  /* text is built when shown, so it follows the language setting
+     (old saves carried an English txt field, which is now ignored) */
+  text(m){
+    if(m.t==="rebirth") return tr(m.again?"m_rebirth_again":"m_rebirth_once");
+    return tr("m_"+m.t,{n:m.n});
+  },
+  key(m){ return m.t+":"+m.n; },
+  gen(seed){
+    const lvl=S.level, t=this.TYPES[Math.floor(hash01(seed*13+5)*this.TYPES.length)];
+    const r=hash01(seed*29+11);
+    switch(t){
+      case "score":      { const n=Math.max(5, Math.round((S.best||5)*(0.6+r*0.8))); return {t,n,p:0,xp:n*15}; }
+      case "perfectRow": { const n=3+Math.floor(r*3)+Math.floor(lvl/20); return {t,n,p:0,xp:n*60}; }
+      case "rings":      { const n=30+Math.floor(r*40)+lvl*2; return {t,n,p:0,xp:n*6}; }
+      case "runs":       { const n=3+Math.floor(r*5); return {t,n,p:0,xp:n*40}; }
+      case "level":      { const n=lvl+1+Math.floor(r*3); return {t,n,p:0,xp:n*30}; }
+      case "rebirth":    { return {t,n:S.rebirths+1,p:0,again:S.rebirths>0,xp:1500}; }
+    }
+  },
+  ensure(){
+    while(S.missions.length<3){
+      // level-gate the rebirth mission so new players don't see it
+      let m=this.gen(S.missionSeed++);
+      if(m.t==="rebirth"&&S.level<CONFIG.REBIRTH_LEVEL*0.6) m=this.gen(S.missionSeed++);
+      S.missions.push(m);
+    }
+    save();
+  },
+  /* remember progress at run start so the over screen can show gains */
+  snapshot(){ this.before=new Map(S.missions.map(m=>[this.key(m),m.p])); },
+  /* event: {score?, perfectRow?, ring?, run?, level?, rebirth?} */
+  progress(ev){
+    let changed=false;
+    for(const m of S.missions){
+      const before=m.p;
+      if(m.t==="score"&&ev.score!==undefined)           m.p=Math.max(m.p,ev.score);
+      if(m.t==="perfectRow"&&ev.perfectRow!==undefined) m.p=Math.max(m.p,ev.perfectRow);
+      if(m.t==="rings"&&ev.ring)                        m.p+=1;
+      if(m.t==="runs"&&ev.run)                          m.p+=1;
+      if(m.t==="level"&&ev.level!==undefined)           m.p=Math.max(m.p,ev.level);
+      if(m.t==="rebirth"&&ev.rebirth!==undefined)       m.p=Math.max(m.p,ev.rebirth);
+      if(m.p!==before) changed=true;
+    }
+    // complete & replace
+    for(let i=S.missions.length-1;i>=0;i--){
+      const m=S.missions[i];
+      if(m.p>=m.n){
+        S.missions.splice(i,1);
+        UI.toast(tr("mission_done",{txt:this.text(m),xp:m.xp}), true);
+        Audio2.unlock();
+        Progress.gainXP(m.xp, true); // mission XP skips run multipliers
+        changed=true;
+      }
+    }
+    if(changed){ this.ensure(); UI.renderMissions(); if(Game.state==="over") UI.renderMissions("o-missions",true); save(); }
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PARTICLES — fixed-size pool, zero allocation per frame. Two kinds:
+   0 = spark (filled circle), 1 = shard (ring fragment arc, for the
+   ring-shatter effect on PERFECT hits).
+   ═══════════════════════════════════════════════════════════════════════ */
+const Particles={
+  pool:[], n:0,
+  init(){
+    for(let i=0;i<CONFIG.PARTICLE_POOL;i++)
+      this.pool.push({on:false,kind:0,x:0,y:0,vx:0,vy:0,life:0,maxLife:1,size:2,rot:0,vr:0,arc:0,r:0,color:"#fff"});
+  },
+  spawn(kind,x,y,vx,vy,life,size,color,r=0,arc=0){
+    for(let i=0;i<this.pool.length;i++){
+      const p=this.pool[i];
+      if(!p.on){
+        p.on=true;p.kind=kind;p.x=x;p.y=y;p.vx=vx;p.vy=vy;
+        p.life=life;p.maxLife=life;p.size=size;p.color=color;
+        p.r=r;p.arc=arc;p.rot=rand(0,TAU);p.vr=rand(-4,4);
+        return;
+      }
+    }
+  },
+  burst(x,y,color,n,speed){
+    const count=Game.lowFX()?Math.ceil(n/2):n;
+    for(let i=0;i<count;i++){
+      const a=rand(0,TAU), s=rand(speed*0.3,speed);
+      this.spawn(0,x,y,Math.cos(a)*s,Math.sin(a)*s,rand(0.3,0.7),rand(1.5,3.5),color);
+    }
+  },
+  /* ring explodes into arc fragments that fly outward, spinning */
+  shatter(x,y,r,color){
+    const frags=Game.lowFX()?5:9;
+    for(let i=0;i<frags;i++){
+      const a=(i/frags)*TAU;
+      this.spawn(1,x+Math.cos(a)*r,y+Math.sin(a)*r,
+        Math.cos(a)*rand(60,160),Math.sin(a)*rand(60,160),
+        rand(0.4,0.8),3,color,r*0.35,TAU/frags*0.8);
+    }
+  },
+  /* perfect-hit effect, dispatched by the equipped FX pack (shop item).
+     All variants reuse the same pool — no new allocation paths. */
+  perfectFX(x,y,r,color,fxOverride){
+    const fx=fxOverride??fxItem(S.equip.fx);
+    const c=fx.hue!==undefined?`hsl(${fx.hue} 90% 65%)`:color;
+    switch(fx.style){
+      case "nova":       // two concentric spark waves
+        for(let i=0;i<(Game.lowFX()?8:14);i++){
+          const a=i/14*TAU;
+          this.spawn(0,x,y,Math.cos(a)*220,Math.sin(a)*220,0.5,3,c);
+          this.spawn(0,x,y,Math.cos(a+0.2)*120,Math.sin(a+0.2)*120,0.7,2,"#ffffff");
+        }
+        break;
+      case "implode":    // sparks collapse into the ring center
+        for(let i=0;i<(Game.lowFX()?8:14);i++){
+          const a=rand(0,TAU), d=r*rand(1.6,2.4);
+          this.spawn(0,x+Math.cos(a)*d,y+Math.sin(a)*d,-Math.cos(a)*d*2.2,-Math.sin(a)*d*2.2,0.45,2.5,c);
+        }
+        break;
+      case "confetti":   // multicolor scatter
+        for(let i=0;i<(Game.lowFX()?9:16);i++){
+          const a=rand(0,TAU), s=rand(70,240);
+          this.spawn(0,x,y,Math.cos(a)*s,Math.sin(a)*s,rand(0.4,0.8),rand(2,4),`hsl(${rand(0,360)} 90% 65%)`);
+        }
+        break;
+      case "quake":      // shatter + heavy shake + white flash sparks
+        this.shatter(x,y,r,c);
+        this.burst(x,y,"#ffffff",10,260);
+        Game.fx.shake=Math.max(Game.fx.shake,0.9);
+        break;
+      default:           // "shatter" — the classic
+        this.shatter(x,y,r,c);
+    }
+  },
+  update(dt){
+    for(let i=0;i<this.pool.length;i++){
+      const p=this.pool[i];
+      if(!p.on) continue;
+      p.life-=dt;
+      if(p.life<=0){p.on=false;continue;}
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      p.vx*=0.985; p.vy*=0.985;
+      p.rot+=p.vr*dt;
+    }
+  },
+  draw(ctx,camY){
+    for(let i=0;i<this.pool.length;i++){
+      const p=this.pool[i];
+      if(!p.on) continue;
+      const a=p.life/p.maxLife;
+      ctx.globalAlpha=a;
+      if(p.kind===0){
+        ctx.fillStyle=p.color;
+        ctx.beginPath(); ctx.arc(p.x,p.y-camY,p.size*a+0.5,0,TAU); ctx.fill();
+      }else{
+        ctx.strokeStyle=p.color; ctx.lineWidth=3*a+1;
+        ctx.beginPath(); ctx.arc(p.x,p.y-camY,p.r,p.rot,p.rot+p.arc); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha=1;
+  },
+};
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   PROGRESS — XP, endless levels, rebirth, streak, milestone celebrations.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Progress={
+  /* Grant XP. raw=true skips run multipliers (missions/daily bonuses). */
+  gainXP(amount, raw=false){
+    const gained=Math.round(raw?amount:amount*xpMult());
+    if(gained<=0) return 0;
+    const prevLifetime=S.lifetimeXP;
+    S.lifetimeXP+=gained;
+    S.xpInLevel+=gained;
+    while(S.xpInLevel>=xpForLevel(S.level)){
+      S.xpInLevel-=xpForLevel(S.level);
+      S.level++;
+      this.celebrateLevel(S.level);
+      Missions.progress({level:S.level});
+    }
+    checkNewUnlocks(prevLifetime);
+    save();
+    return gained;
+  },
+  /* Level-up juice: DOM flash + rising number, canvas chromatic pulse,
+     arpeggio, haptic. Milestones (10/25/100 multiples) get procedurally
+     generated titles so they never run out. */
+  celebrateLevel(lvl){
+    Audio2.levelup(); Haptics.perfect();
+    UI.levelFx(lvl);
+    Game.fx.chroma=1;
+    if(lvl%100===0)      { UI.toast(tr("lvl_100",{title:this.milestoneTitle(lvl),n:lvl}), true); Game.fx.shake=1; }
+    else if(lvl%25===0)  { UI.toast(tr("lvl_25",{title:this.milestoneTitle(lvl),n:lvl}), true); }
+    else if(lvl%10===0)  { UI.toast(tr("lvl_10",{title:this.milestoneTitle(lvl),n:lvl})); }
+    if(lvl>=CONFIG.REBIRTH_LEVEL) UI.refreshHome();
+  },
+  /* Procedural milestone titles: seeded from the level number, infinite. */
+  milestoneTitle(lvl){
+    const RANKS=["Pilot","Drifter","Voyager","Slingshot","Comet","Meteor","Pulsar","Quasar","Nova","Singularity"];
+    return WORDS_A[Math.floor(hash01(lvl*31+7)*WORDS_A.length)]+" "+RANKS[Math.floor(hash01(lvl*17+3)*RANKS.length)];
+  },
+  /* Daily streak — called once at boot. */
+  checkDaily(){
+    const d=new Date();
+    const today=`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    if(S.lastDay===today) return;
+    const y=new Date(d.getTime()-864e5);
+    const yesterday=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
+    S.streak=(S.lastDay===yesterday)?S.streak+1:1;
+    S.lastDay=today;
+    const bonus=CONFIG.STREAK_DAILY_XP*Math.min(S.streak,10);
+    UI.toast(tr("streak_toast",{n:S.streak,xp:bonus}), S.streak>1);
+    this.gainXP(bonus, true);
+    save();
+  },
+  rebirthAvailable(){ return S.level>=CONFIG.REBIRTH_LEVEL; },
+  /* Optional prestige reset: level/XP → 1, permanent multiplier up.
+     Lifetime XP (and thus unlocks), best score, streak all KEPT. */
+  rebirth(){
+    if(!this.rebirthAvailable()) return;
+    S.rebirths++; S.level=1; S.xpInLevel=0;
+    Missions.progress({rebirth:S.rebirths});
+    UI.toast(tr("rebirth_done",{n:S.rebirths,m:(1+S.rebirths*CONFIG.REBIRTH_MULT_GAIN).toFixed(1)}), true);
+    Audio2.unlock(); Haptics.perfect();
+    save(); UI.refreshHome();
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GAME — core loop. World is in "virtual units": width is always
+   CONFIG.VIRTUAL_W (480), height varies with aspect ratio. One finger,
+   one verb: tap = release the orbiting dot.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Game={
+  canvas:null, ctx:null,
+  dpr:1, scale:1, vw:480, vh:800,      // virtual view size
+  safeTop:0, safeBottom:0,             // safe-area + banner, in virtual units
+  state:"menu",                        // menu | playing | dying | over | paused
+  camY:0,
+  time:0, lastT:0, running:false,
+
+  // run state
+  score:0, combo:1, perfectRow:0, revived:false,  // revived = ad-continue used
+  coinRevives:0, runPerfects:0,
+  runXPGained:0, missMargin:null, flipsSeen:0,
+
+  cur:null, next:null, prevRing:null,  // ring objects
+  dot:{x:0,y:0,angle:0,dir:1,omega:2,orbR:80,orbRT:80,mode:"orbit",vx:0,vy:0,trail:[],minDist:1e9},
+  dyingT:0,
+
+  fx:{shake:0,chroma:0,hitstop:0,punch:0,scorePop:0,flash:0},
+  word:{txt:"",age:9,color:"#fff",size:44},   // big centre praise word
+  waves:[],                                   // pooled shockwave rings
+  beatBestThisRun:false,
+  stars:null,
+  floats:[],                            // pooled floating texts
+
+  lowFX(){ return S.lowFX; },
+
+  init(){
+    this.canvas=$("game");
+    this.ctx=this.canvas.getContext("2d");
+    for(let i=0;i<12;i++) this.floats.push({on:false,x:0,y:0,txt:"",life:0,maxLife:1,color:"#fff",size:16,world:true});
+    this.resize();
+    window.addEventListener("resize",()=>this.resize());
+    // Input: pointerdown covers touch + mouse with zero delay
+    // (touch-action:none in CSS suppresses browser gestures).
+    this.canvas.addEventListener("pointerdown",e=>{e.preventDefault();this.onTap();},{passive:false});
+    window.addEventListener("keydown",e=>{
+      if(e.code==="Space"){e.preventDefault();
+        if(this.state==="over"&&performance.now()-(UI.overShownAt||0)>450){ Ads.reviveDeclined(); this.startRun(); }
+        else this.onTap();}
+      if(e.code==="Escape"&&this.state==="playing") UI.pause();
+    });
+    this.lastT=performance.now();
+    requestAnimationFrame(t=>this.frame(t));
+  },
+
+  resize(){
+    const cssW=window.innerWidth, cssH=window.innerHeight;
+    // A hidden/minimised WebView can report 0×0 during startup; dividing
+    // by that poisons vw/vh with NaN and crashes the renderer. Keep the
+    // last good size and wait for the next real resize event.
+    if(!(cssW>0&&cssH>0)) return;
+    // Cap DPR: cheap-GPU phones burn fill-rate fast; lowFX drops to 1.
+    this.dpr=S.lowFX?1:Math.min(window.devicePixelRatio||1,CONFIG.DPR_CAP);
+    this.canvas.width=Math.round(cssW*this.dpr);
+    this.canvas.height=Math.round(cssH*this.dpr);
+    // Fit by width on phones (portrait), but never let the view get
+    // shorter than VIRTUAL_MIN_H — on tablets/landscape/desktop the world
+    // widens instead, so the next ring can't spawn off the top edge.
+    this.scale=Math.min(cssW/CONFIG.VIRTUAL_W, cssH/CONFIG.VIRTUAL_MIN_H);
+    this.vw=cssW/this.scale;
+    this.vh=cssH/this.scale;
+    // safe-area probes → virtual units, so the HUD clears notches & banner
+    this.safeTop=($("probe-top").offsetHeight||0)/this.scale;
+    this.safeBottom=($("probe-bottom").offsetHeight||0)/this.scale;
+    this.buildStars();
+  },
+  buildStars(){
+    // Static parallax starfield, generated once per resize (not per frame).
+    this.stars=[];
+    const n=this.lowFX()?36:80;
+    for(let i=0;i<n;i++)
+      this.stars.push({x:rand(0,this.vw),y:rand(0,this.vh*1.5),s:rand(0.5,1.8),a:rand(0.15,0.7),p:rand(0.15,0.45)});
+  },
+
+  /* ── difficulty: smooth continuous functions, clamped for playability.
+        n = rings passed this run, L = player level. Works identically at
+        level 3 and level 300 — no tiers, no special cases. ─────────── */
+  perfectFrac(n){ return n<CONFIG.EASY_RINGS?CONFIG.PERFECT_FRACTION_EARLY:CONFIG.PERFECT_FRACTION; },
+  orbitSpeed(n){ return clamp(CONFIG.ORBIT_SPEED_BASE + CONFIG.ORBIT_SPEED_GROWTH*Math.max(0,n-CONFIG.EASY_RINGS) + CONFIG.ORBIT_SPEED_LEVEL*Math.sqrt(S.level), 0, CONFIG.ORBIT_SPEED_MAX); },
+  targetR(n){    if(n<CONFIG.EASY_RINGS) return CONFIG.TARGET_R_BASE;
+    return clamp(CONFIG.TARGET_R_BASE - CONFIG.TARGET_R_SHRINK*Math.sqrt(n-CONFIG.EASY_RINGS) - CONFIG.TARGET_R_LEVEL*Math.sqrt(S.level), CONFIG.TARGET_R_MIN, CONFIG.TARGET_R_BASE); },
+  flipChance(n){ return n<CONFIG.FLIP_START_N?0:clamp((n-CONFIG.FLIP_START_N)*CONFIG.FLIP_CHANCE_GROWTH + S.level*CONFIG.FLIP_CHANCE_LEVEL, 0, CONFIG.FLIP_CHANCE_MAX); },
+  moveAmp(n){    return n<CONFIG.MOVE_START_N?0:clamp((n-CONFIG.MOVE_START_N)*CONFIG.MOVE_AMP_GROWTH, 0, CONFIG.MOVE_AMP_MAX); },
+  moveSpeed(n){  return clamp(CONFIG.MOVE_SPEED_BASE + n*0.02, 0, CONFIG.MOVE_SPEED_MAX); },
+
+  makeRing(x,y,r,n){
+    return {x,y,baseX:x,r,pf:this.perfectFrac(n),
+      moveAmp:this.moveAmp(n),moveSpeed:this.moveSpeed(n),movePhase:rand(0,TAU),
+      pulse:0};
+  },
+  spawnNext(){
+    const n=this.rings;
+    const dist=rand(CONFIG.TARGET_DIST_MIN,CONFIG.TARGET_DIST_MAX);
+    const cone=CONFIG.TARGET_CONE_DEG*Math.PI/180;
+    let a=rand(-cone,cone);
+    let x=this.cur.x+Math.sin(a)*dist;
+    const margin=70;
+    if(x<margin||x>this.vw-margin) { a=-a; x=this.cur.x+Math.sin(a)*dist; }
+    x=clamp(x,margin,this.vw-margin);
+    const y=this.cur.y-Math.cos(a)*dist;
+    this.next=this.makeRing(x,y,this.targetR(n),n);
+  },
+
+  startRun(){
+    this.state="playing";
+    this.score=0; this.combo=1; this.perfectRow=0; this.revived=false;
+    this.beatBestThisRun=false; this.word.age=9;
+    this.rings=0; this.savesLeft=CONFIG.FREE_SAVES_PER_RUN;
+    Missions.snapshot();
+    this.coinRevives=0; this.runPerfects=0;
+    this.runXPGained=0; this.missMargin=null;
+    this.cur=this.makeRing(this.vw/2, 0, CONFIG.TARGET_R_BASE, 0);
+    this.camY=this.cur.y-this.vh*0.62;
+    this.prevRing=null;
+    this.spawnNext();
+    const d=this.dot;
+    d.mode="orbit"; d.dir=1; d.angle=Math.PI/2; d.omega=this.orbitSpeed(0);
+    d.orbR=d.orbRT=this.cur.r+CONFIG.ORBIT_GAP; d.trail.length=0; d.minDist=1e9;
+    for(const f of this.floats) f.on=false;
+    Awake.on();
+    UI.showScreen(null);
+    $("btn-pause").style.display="block";
+    Music.play("game");
+  },
+
+  /* what would a release RIGHT NOW score? Exactly the tangent onTap()
+     would launch along, classified by the same classifyShot() the
+     capture code scores with. Drives the traffic-light ring tint. */
+  predictRelease(){
+    const d=this.dot;
+    if(d.mode!=="orbit"||!this.next) return null;
+    const tx=-Math.sin(d.angle)*d.dir, ty=Math.cos(d.angle)*d.dir;
+    return classifyShot(d.x,d.y,tx,ty,this.next);
+  },
+
+  onTap(){
+    if(this.state!=="playing") return;
+    const d=this.dot;
+    if(d.mode!=="orbit") return;
+    // Release: fly along the orbit tangent.
+    const tx=-Math.sin(d.angle)*d.dir, ty=Math.cos(d.angle)*d.dir;
+    d.vx=tx*CONFIG.FLY_SPEED; d.vy=ty*CONFIG.FLY_SPEED;
+    d.mode="fly"; d.minDist=1e9;
+    Audio2.release(); Haptics.tap();
+  },
+
+  /* dot captured by `next` ring; perp = straight-line closest-approach
+     distance to the ring's center → hit quality + near-miss feedback. */
+  capture(perp){
+    const ring=this.next;
+    // same threshold expression as classifyShot() — keep them identical
+    const perfect=perp<=ring.r*ring.pf;
+    this.rings++;
+    let points;
+    if(perfect){
+      this.combo=Math.min(this.combo+1,CONFIG.COMBO_MAX);
+      this.perfectRow++; this.runPerfects++;
+      points=this.combo;
+      Audio2.perfect(this.combo); Haptics.perfect();
+      Particles.perfectFX(ring.x,ring.y,ring.r,UI.trailColor());
+      Juice.perfect(ring,this.combo);
+      this.fx.shake=Math.max(this.fx.shake,0.5+this.combo*0.06);
+      this.float(ring.x,ring.y+ring.r+30,tr("perfect",{n:this.combo}),UI.trailColor(),20);
+    }else{
+      // soft break: lose a couple of steps, not the whole streak
+      this.combo=Math.max(1,this.combo-CONFIG.COMBO_BREAK_STEP); this.perfectRow=0; points=1;
+      Juice.hit(ring);
+      Audio2.thunk(); Haptics.hit();
+      Particles.burst(this.dot.x,this.dot.y,"#ffffff",10,140);
+      this.fx.shake=Math.max(this.fx.shake,0.25);
+      const edgePx=Math.round(ring.r-perp);
+      this.float(ring.x,ring.y+ring.r+30,edgePx<8?tr("clipped"):this.combo>1?tr("combo_kept",{n:this.combo}):`+1`,"#ffffff",16);
+    }
+    this.score+=points;
+    this.fx.scorePop=1;
+    // live NEW BEST the moment you pass it (not just on the death screen)
+    if(!this.beatBestThisRun&&S.best>=5&&this.score>S.best){ this.beatBestThisRun=true; Juice.newBest(ring); }
+    // live XP so level-ups can pop mid-run
+    this.runXPGained+=Progress.gainXP(points*CONFIG.XP_PER_POINT);
+    Missions.progress({ring:true,score:this.score,perfectRow:this.perfectRow});
+    this.checkScoreMilestone();
+
+    // promote rings
+    ring.pulse=1;
+    this.prevRing=this.cur; this.prevRingFade=1;
+    this.cur=ring;
+    this.spawnNext();
+
+    // dot latches on: orbit from its capture position, radius eases out
+    const d=this.dot;
+    d.mode="orbit";
+    d.angle=Math.atan2(d.y-ring.y,d.x-ring.x);
+    d.orbR=Math.max(Math.hypot(d.x-ring.x,d.y-ring.y),ring.r*0.3);
+    d.orbRT=ring.r+CONFIG.ORBIT_GAP;
+    d.omega=this.orbitSpeed(this.rings);
+    // random rotation flip — the trap that keeps veterans honest
+    if(Math.random()<this.flipChance(this.rings)){
+      d.dir*=-1; this.flipsSeen++;
+      this.float(ring.x,ring.y,(d.dir>0?"⟳ ":"⟲ ")+tr("flip"),"#ffc94d",17);
+      Audio2.blip(500,300,0.12,"square",0.2);
+    }
+  },
+
+  /* score milestones: 5,10,25,50,75,100 then every 50 — always a visible
+     next target, procedurally infinite. */
+  nextMilestone(s){
+    const seq=[5,10,25,50,75,100];
+    for(const m of seq) if(s<m) return m;
+    return (Math.floor(s/50)+1)*50;
+  },
+  checkScoreMilestone(){
+    const before=this.nextMilestone(this.score-1), after=this.nextMilestone(this.score);
+    if(after!==before){ // crossed `before`
+      this.float(this.cur.x,this.cur.y+this.cur.r+58,`— ${before} —`,"#ffd23f",24);
+      Particles.burst(this.cur.x,this.cur.y,"#ffd23f",16,200);
+      Audio2.blip(660,990,0.15,"triangle",0.3);
+    }
+  },
+
+  /* one free save per run: the current ring "reels the dot back in"
+     instead of ending the run. Combo drops like a plain landing. */
+  freeSave(margin){
+    this.savesLeft--;
+    const d=this.dot, c=this.cur;
+    d.mode="orbit";
+    d.angle=Math.atan2(d.y-c.y,d.x-c.x);
+    d.orbR=Math.min(Math.hypot(d.x-c.x,d.y-c.y),260);   // eases back onto the orbit
+    d.minDist=1e9; d.trail.length=0;
+    this.combo=Math.max(1,this.combo-CONFIG.COMBO_BREAK_STEP); this.perfectRow=0;
+    Juice.saved(c,margin);
+  },
+
+  die(margin){
+    this.state="dying"; this.dyingT=0;
+    this.missMargin=margin;
+    Audio2.miss(); Haptics.death();
+    this.fx.shake=1;
+    Particles.burst(this.dot.x,this.dot.y,"#ff5e8a",22,240);
+    Juice.death(margin);
+    Music.dip();
+  },
+  /* price of the NEXT coin revive this run — escalates so it can't be
+     spammed; resets every run. */
+  nextRevivePrice(){
+    return Math.round(CONFIG.REVIVE_COIN_BASE*Math.pow(CONFIG.REVIVE_COIN_GROWTH,this.coinRevives));
+  },
+  /* coin-revive path: same continue as the rewarded ad, paid in coins.
+     Resolves the revive gate → a pending interstitial is cancelled. */
+  coinRevive(){
+    if(this.state!=="over") return;
+    const price=this.nextRevivePrice();
+    if(S.coins<price) return;
+    S.coins-=price; this.coinRevives++; save();
+    Ads.interstitialPending=false;      // revive taken — interstitial loses
+    UI.toast(tr("coin_revive",{n:price}),true);
+    Audio2.unlock(); Haptics.perfect();
+    this.revive();
+  },
+  /* revive core (rewarded ad or coins): back in orbit around the launch
+     ring, score kept. `revived` flags only the once-per-run AD continue. */
+  revive(fromAd){
+    if(fromAd) this.revived=true;
+    const d=this.dot, ring=this.cur;
+    d.mode="orbit";
+    d.angle=rand(0,TAU); d.orbR=d.orbRT=ring.r+CONFIG.ORBIT_GAP;
+    d.minDist=1e9; d.trail.length=0;
+    this.state="playing";
+    UI.showScreen(null);
+    $("btn-pause").style.display="block";
+    Awake.on();
+    Music.play("game");
+  },
+
+  float(x,y,txt,color,size){
+    for(const f of this.floats){
+      if(!f.on){f.on=true;f.x=x;f.y=y;f.txt=txt;f.color=color;f.size=size;f.life=f.maxLife=1.1;return;}
+    }
+  },
+
+  /* ── main loop ──────────────────────────────────────────────────── */
+  frame(t){
+    requestAnimationFrame(tt=>this.frame(tt));
+    let dt=(t-this.lastT)/1000; this.lastT=t;
+    if(dt>0.1) dt=0.1;                     // tab-switch spike guard
+    if(this.state==="paused") return;      // loop halted while paused
+    // hit-stop: freeze the sim for a few frames on big hits (impact read)
+    if(this.fx.hitstop>0){ this.fx.hitstop-=dt; this.render(); return; }
+    this.time+=dt;
+    this.update(dt);
+    this.render();
+  },
+
+  update(dt){
+    const playing=this.state==="playing"||this.state==="dying";
+    Particles.update(dt);
+    if(this.fx.shake>0) this.fx.shake=Math.max(0,this.fx.shake-dt*2.4);
+    if(this.fx.chroma>0) this.fx.chroma=Math.max(0,this.fx.chroma-dt*1.6);
+    Juice.update(dt);
+    for(const f of this.floats){ if(f.on){ f.life-=dt; f.y-=26*dt; if(f.life<=0) f.on=false; } }
+    if(this.prevRing&&this.prevRingFade>0) this.prevRingFade=Math.max(0,this.prevRingFade-dt*1.4);
+    if(!playing){
+      // menu: idle world drift so the background feels alive
+      this.camY-=dt*6;
+      return;
+    }
+
+    const d=this.dot;
+    // moving targets oscillate horizontally (smooth, clamped amplitude)
+    for(const ring of [this.cur,this.next]){
+      if(ring&&ring.moveAmp>0) ring.x=ring.baseX+Math.sin(this.time*ring.moveSpeed+ring.movePhase)*ring.moveAmp;
+      if(ring&&ring.pulse>0) ring.pulse=Math.max(0,ring.pulse-dt*2.5);
+    }
+
+    if(this.state==="dying"){
+      const sdt=dt*0.35;                   // slow-mo death for readability
+      d.x+=d.vx*sdt; d.y+=d.vy*sdt;
+      this.dyingT+=dt;
+      const slow=this.missMargin!==null&&this.missMargin<=CONFIG.NEAR_MISS_SHOW_PX?CONFIG.NEAR_MISS_SLOWMO_S:CONFIG.DEATH_SLOWMO_S;
+      if(this.dyingT>=slow) UI.gameOver();
+      return;
+    }
+
+    if(d.mode==="orbit"){
+      d.orbR=lerp(d.orbR,d.orbRT,1-Math.exp(-dt*10)); // ease onto orbit radius
+      d.angle+=d.dir*d.omega*dt;
+      d.x=this.cur.x+Math.cos(d.angle)*d.orbR;
+      d.y=this.cur.y+Math.sin(d.angle)*d.orbR;
+    }else{ // fly
+      const px=d.x,py=d.y;
+      d.x+=d.vx*dt; d.y+=d.vy*dt;
+      const ring=this.next;
+      // segment-based checks → no tunneling even on a lagging frame.
+      // Capture on the SEGMENT distance (not just the endpoint), so a
+      // razor-edge clip can't step across the ring in one frame — this
+      // is what makes classifyShot()'s prediction exact for static
+      // rings at any frame rate.
+      const distNow=Math.hypot(d.x-ring.x,d.y-ring.y);
+      const segd=segPointDist(px,py,d.x,d.y,ring.x,ring.y);
+      d.minDist=Math.min(d.minDist,segd);
+      if(segd<=ring.r){
+        // perpendicular (closest-approach) distance of the flight line —
+        // the "how centered was that" metric, via the SAME shotPerp()
+        // the traffic-light predictor uses (see classifyShot)
+        const vlen=Math.hypot(d.vx,d.vy);
+        const {perp}=shotPerp(d.x,d.y,d.vx/vlen,d.vy/vlen,ring);
+        this.capture(Math.min(perp,d.minDist));
+      }else{
+        const movingAway=((ring.x-d.x)*d.vx+(ring.y-d.y)*d.vy)<0;
+        const off=d.x<-40||d.x>this.vw+40||d.y-this.camY>this.vh+80||d.y-this.camY<-120;
+        if((movingAway&&distNow>ring.r+10)||off){
+          const margin=Math.max(0,d.minDist-ring.r);
+          if(this.savesLeft>0) this.freeSave(margin); else this.die(margin);
+        }
+      }
+      // trail: short ring buffer of previous positions
+      d.trail.push(d.x,d.y);
+      if(d.trail.length>26) d.trail.splice(0,2);
+    }
+
+    // camera eases so current ring rests ~62% down the screen
+    const targetCam=this.cur.y-this.vh*0.62;
+    this.camY=lerp(this.camY,targetCam,1-Math.exp(-dt*4));
+  },
+};
+/* ── SHOT CLASSIFIER — single source of truth ─────────────────────────
+   Used BOTH by the in-flight capture code and the traffic-light
+   predictor, so the light can never disagree with the score.
+   perp = closest-approach distance of the flight ray to the ring
+   center. It is invariant along a straight flight, so for a stationary
+   ring the release-time prediction IS the capture-time outcome.
+   (Once targets start drifting at n≥MOVE_START_N the light reads the
+   ring's current position — the same position a release now would be
+   scored against.) */
+function shotPerp(px,py,tx,ty,ring){
+  return {
+    ahead:(ring.x-px)*tx+(ring.y-py)*ty>0,          // ring in front of travel?
+    perp:Math.abs((ring.x-px)*ty-(ring.y-py)*tx),   // |cross(T, C−P)|, T unit
+  };
+}
+function classifyShot(px,py,tx,ty,ring){
+  const s=shotPerp(px,py,tx,ty,ring);
+  if(!s.ahead||s.perp>ring.r) return "miss";
+  return s.perp<=ring.r*ring.pf?"perfect":"hit";
+}
+/* point-to-segment distance (capture & near-miss math) */
+function segPointDist(ax,ay,bx,by,cx,cy){
+  const dx=bx-ax,dy=by-ay;
+  const L2=dx*dx+dy*dy;
+  if(L2===0) return Math.hypot(cx-ax,cy-ay);
+  let t=((cx-ax)*dx+(cy-ay)*dy)/L2;
+  t=clamp(t,0,1);
+  return Math.hypot(cx-(ax+dx*t),cy-(ay+dy*t));
+}
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   RENDER — one canvas pass per frame. All drawing in virtual units via a
+   single setTransform; minimal state changes, zero per-frame allocation.
+   ═══════════════════════════════════════════════════════════════════════ */
+Game.render=function(){
+  const ctx=this.ctx, vw=this.vw, vh=this.vh;
+  const k=this.scale*this.dpr;
+
+  // screen shake (skipped in low-FX mode)
+  let shx=0,shy=0;
+  if(this.fx.shake>0&&!this.lowFX()){
+    const s=this.fx.shake*CONFIG.SHAKE_MAX;
+    shx=rand(-s,s); shy=rand(-s,s);
+  }
+  // zoom punch toward the orbit point (where the action is) on hits
+  const z=1+this.fx.punch*CONFIG.JUICE_PUNCH_ZOOM, zx=vw/2, zy=vh*0.62;
+  ctx.setTransform(k*z,0,0,k*z,(shx+zx*(1-z))*k,(shy+zy*(1-z))*k);
+
+  // background gradient from the equipped "world"
+  const bg=bgItem(S.equip.bg);
+  const g=ctx.createLinearGradient(0,0,0,vh);
+  g.addColorStop(0,bg.top); g.addColorStop(1,bg.bot);
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,vw+40,vh+40);
+
+  // parallax starfield
+  ctx.fillStyle="#ffffff";
+  for(let i=0;i<this.stars.length;i++){
+    const st=this.stars[i];
+    let sy=(st.y-this.camY*st.p)%(vh*1.5); if(sy<0)sy+=vh*1.5;
+    ctx.globalAlpha=st.a*0.75;
+    ctx.beginPath(); ctx.arc(st.x,sy-vh*0.25,st.s*1.3,0,TAU); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  const cam=this.camY;
+  const trailC=UI.trailColor();
+
+  // fading previous ring
+  if(this.prevRing&&this.prevRingFade>0){
+    ctx.globalAlpha=this.prevRingFade*0.35;
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(this.prevRing.x,this.prevRing.y-cam,this.prevRing.r,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  const inRun=this.state==="playing"||this.state==="dying";
+  if(inRun){
+    // current ring (the one we orbit)
+    const c=this.cur;
+    ctx.strokeStyle="rgba(36,16,122,.38)"; ctx.lineWidth=7+c.pulse*5;   // candy drop shadow
+    ctx.beginPath(); ctx.arc(c.x,c.y-cam+5,c.r+c.pulse*8,0,TAU); ctx.stroke();
+    ctx.strokeStyle=trailC; ctx.lineWidth=7+c.pulse*5;
+    ctx.beginPath(); ctx.arc(c.x,c.y-cam,c.r+c.pulse*8,0,TAU); ctx.stroke();
+    // faint orbit path
+    ctx.globalAlpha=0.35; ctx.lineWidth=2; ctx.strokeStyle="#ffffff";
+    ctx.beginPath(); ctx.arc(c.x,c.y-cam,this.dot.orbRT,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+
+    // target ring: outer + dashed inner "perfect zone" that breathes
+    const n=this.next;
+    const breathe=1+Math.sin(this.time*3)*0.04;
+    // traffic-light assist: edge glow on the NEXT ring only, colored by
+    // classifyShot() — the exact function the score uses — so green
+    // means "release now = guaranteed PERFECT". Fixed semantic colors
+    // (not the equipped scheme), drawn as a glow outside the neutral
+    // white ring so it reads on every backdrop without repainting it.
+    if(CONFIG.TRAFFIC_LIGHT_ASSIST&&this.state==="playing"&&this.dot.mode==="orbit"){
+      const res=this.predictRelease();
+      const tint=res==="perfect"?"#3dfc8a":res==="hit"?"#ffd54d":"#ff5e4d";
+      // dark underlay + solid colour band: reads on every bright world
+      ctx.strokeStyle="rgba(36,16,122,.45)"; ctx.lineWidth=13;
+      ctx.beginPath(); ctx.arc(n.x,n.y-cam,n.r+9,0,TAU); ctx.stroke();
+      ctx.strokeStyle=tint; ctx.lineWidth=7;
+      ctx.beginPath(); ctx.arc(n.x,n.y-cam,n.r+9,0,TAU); ctx.stroke();
+    }
+    ctx.fillStyle="rgba(36,16,122,.38)";                            // drop shadow
+    ctx.beginPath(); ctx.arc(n.x,n.y-cam+6,n.r+3,0,TAU); ctx.fill();
+    ctx.globalAlpha=0.28; ctx.fillStyle="#ffffff";
+    ctx.beginPath(); ctx.arc(n.x,n.y-cam,n.r,0,TAU); ctx.fill();
+    ctx.globalAlpha=1;
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.arc(n.x,n.y-cam,n.r,0,TAU); ctx.stroke();
+    // perfect zone: solid bullseye in the trail colour
+    ctx.fillStyle=trailC; ctx.globalAlpha=0.95;
+    ctx.beginPath(); ctx.arc(n.x,n.y-cam,n.r*n.pf*breathe,0,TAU); ctx.fill();
+    ctx.globalAlpha=1;
+
+    // dot trail (while flying) — cheap fading polyline
+    const d=this.dot;
+    if(d.mode==="fly"&&d.trail.length>=4&&!this.lowFX()){
+      ctx.strokeStyle=trailC; ctx.lineCap="round";
+      for(let i=0;i<d.trail.length-2;i+=2){
+        const a=i/d.trail.length;
+        ctx.globalAlpha=a*0.6; ctx.lineWidth=1+a*5;
+        ctx.beginPath();
+        ctx.moveTo(d.trail[i],d.trail[i+1]-cam);
+        ctx.lineTo(d.trail[i+2],d.trail[i+3]-cam);
+        ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    }
+
+    // aim hint while orbiting: tangent line showing launch direction.
+    // Long at level 1 for onboarding, shrinks smoothly with level to a
+    // floor (INDICATOR_LEN_BASE/MIN — independent of TARGET_R_MIN).
+    if(d.mode==="orbit"){
+      const len=clamp(CONFIG.INDICATOR_LEN_BASE-CONFIG.INDICATOR_SHRINK*Math.sqrt(Math.max(S.level-1,0)),
+        CONFIG.INDICATOR_LEN_MIN,CONFIG.INDICATOR_LEN_BASE);
+      const tx=-Math.sin(d.angle)*d.dir, ty=Math.cos(d.angle)*d.dir;
+      // high-contrast aim line: dark outline under a solid white stroke,
+      // with a round tip so the launch direction reads at a glance
+      const x0=d.x+tx*14, y0=d.y-cam+ty*14, x1=d.x+tx*(14+len), y1=d.y-cam+ty*(14+len);
+      ctx.lineCap="round";
+      ctx.strokeStyle="rgba(36,16,122,.5)"; ctx.lineWidth=7;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.strokeStyle="#ffffff"; ctx.lineWidth=3.5;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(x1,y1,4,0,TAU); ctx.fill();
+    }
+
+    this.drawDot(ctx,d.x,d.y-cam,cam);
+  }
+
+  Particles.draw(ctx,cam);
+
+  // floating texts (world-anchored)
+  ctx.textAlign="center";
+  for(const f of this.floats){
+    if(!f.on) continue;
+    ctx.globalAlpha=Math.min(1,f.life/f.maxLife*1.6);
+    ctx.font=`900 ${f.size}px system-ui,sans-serif`;
+    ctx.lineWidth=5; ctx.lineJoin="round"; ctx.strokeStyle="rgba(36,16,122,.8)";
+    ctx.strokeText(f.txt,f.x,f.y-cam);
+    ctx.fillStyle=f.color;
+    ctx.fillText(f.txt,f.x,f.y-cam);
+  }
+  ctx.globalAlpha=1;
+
+  // chromatic pulse on level-up: expanding RGB-split rings from center
+  if(this.fx.chroma>0&&!this.lowFX()){
+    const p=1-this.fx.chroma;
+    const r=p*vh*0.8+40;
+    ctx.globalAlpha=this.fx.chroma*0.7; ctx.lineWidth=10*this.fx.chroma+2;
+    ctx.strokeStyle="#ff004c"; ctx.beginPath(); ctx.arc(vw/2-4,vh/2,r,0,TAU); ctx.stroke();
+    ctx.strokeStyle="#00e5ff"; ctx.beginPath(); ctx.arc(vw/2+4,vh/2,r*1.02,0,TAU); ctx.stroke();
+    ctx.strokeStyle="#ffffff"; ctx.beginPath(); ctx.arc(vw/2,vh/2,r*1.01,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  Juice.drawWorld(ctx,cam);
+  // screen-space overlays + HUD are drawn WITHOUT the zoom punch so the
+  // HUD never slides off the edges
+  ctx.setTransform(k,0,0,k,shx*k,shy*k);
+  Juice.drawScreen(ctx,vw,vh,inRun);
+  if(inRun) this.drawHUD(ctx);
+};
+
+/* equipped skin renderer — shapes are procedural, no image assets */
+Game.drawDot=function(ctx,x,y,cam){
+  const skin=skinItem(S.equip.skin);
+  const r=CONFIG.DOT_R;
+  ctx.fillStyle="rgba(36,16,122,.38)"; ctx.beginPath(); ctx.arc(x,y+4,r+2,0,TAU); ctx.fill();
+  ctx.fillStyle=skin.c; ctx.strokeStyle=skin.c;
+  switch(skin.shape){
+    case "ring": ctx.lineWidth=3.5; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke(); break;
+    case "square": ctx.save(); ctx.translate(x,y); ctx.rotate(this.time*2); ctx.fillRect(-r,-r,r*2,r*2); ctx.restore(); break;
+    case "diamond": ctx.save(); ctx.translate(x,y); ctx.rotate(Math.PI/4+this.time); ctx.fillRect(-r*0.9,-r*0.9,r*1.8,r*1.8); ctx.restore(); break;
+    case "comet": ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+      ctx.globalAlpha=0.4; ctx.beginPath(); ctx.arc(x,y,r*1.9,0,TAU); ctx.fill(); ctx.globalAlpha=1; break;
+    case "star":{ ctx.save(); ctx.translate(x,y); ctx.rotate(this.time*1.5); ctx.beginPath();
+      for(let i=0;i<10;i++){const rr=i%2?r*0.5:r*1.3, a=i/10*TAU; ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
+      ctx.closePath(); ctx.fill(); ctx.restore(); break; }
+    case "eye": ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+      ctx.fillStyle="#0b0d1a"; ctx.beginPath(); ctx.arc(x,y,r*0.45,0,TAU); ctx.fill(); break;
+    case "tri": ctx.save(); ctx.translate(x,y);
+      ctx.rotate(this.dot.mode==="fly"?Math.atan2(this.dot.vy,this.dot.vx)+Math.PI/2:this.dot.angle);
+      ctx.beginPath(); ctx.moveTo(0,-r*1.3); ctx.lineTo(r,r); ctx.lineTo(-r,r); ctx.closePath(); ctx.fill(); ctx.restore(); break;
+    default: ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+  }
+};
+
+/* in-run HUD: ghost progress bar, big score, combo, next milestone,
+   level chip. All offset by safe-area + banner so nothing is obscured. */
+Game.drawHUD=function(ctx){
+  const vw=this.vw, top=this.safeTop, bot=this.vh-this.safeBottom;
+
+  // ghost bar: this run vs best (plus last-run marker) — always visible
+  const best=Math.max(S.best,1);
+  const bw=vw*0.6, bx=(vw-bw)/2, by=top+14;
+  ctx.fillStyle="#00000030"; ctx.fillRect(bx,by,bw,6);
+  ctx.fillStyle="#ffd23f"; ctx.fillRect(bx,by,bw*clamp(this.score/best,0,1),6);
+  if(S.lastRun>0){
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(bx+bw*clamp(S.lastRun/best,0,1)-1.5,by-3,3,11);
+  }
+  ctx.fillStyle="#ffffffcc"; ctx.font="800 10px system-ui,sans-serif";
+  ctx.textAlign="left"; ctx.fillText("0",bx-12,by+6);
+  ctx.textAlign="right"; ctx.fillText(`${S.best}`,bx+bw+26,by+6);
+
+  // score + combo
+  ctx.textAlign="center";
+  ctx.font=`900 ${Math.round(46*(1+this.fx.scorePop*0.35))}px system-ui,sans-serif`;
+  ctx.fillStyle="rgba(36,16,122,.45)"; ctx.fillText(`${this.score}`,vw/2,top+68);   // drop shadow
+  ctx.fillStyle="#ffffff"; ctx.fillText(`${this.score}`,vw/2,top+64);
+  if(this.combo>1){
+    const pulse=1+Math.sin(this.time*8)*0.08;
+    ctx.font=`900 ${Math.round(20*pulse)}px system-ui,sans-serif`;
+    ctx.lineWidth=5; ctx.lineJoin="round"; ctx.strokeStyle="rgba(36,16,122,.8)";
+    ctx.strokeText(`COMBO ×${this.combo}`,vw/2,top+90);
+    ctx.fillStyle=UI.trailColor(); ctx.fillText(tr("combo",{n:this.combo}),vw/2,top+90);
+  }else{
+    ctx.fillStyle="#ffffffd9"; ctx.font="800 12px system-ui,sans-serif";
+    ctx.fillText(tr("next",{n:this.nextMilestone(this.score)}),vw/2,top+86);
+  }
+
+  // free-save shield chip (top-left) while it's still available
+  if(this.savesLeft>0){
+    ctx.textAlign="left"; ctx.font="900 15px system-ui,sans-serif";
+    ctx.fillStyle="#ffffff"; ctx.fillText(`🛡×${this.savesLeft}`,14,top+30);
+  }
+
+  // level chip bottom-left with mini XP bar (clears banner via safeBottom)
+  const need=xpForLevel(S.level);
+  ctx.textAlign="left"; ctx.fillStyle="#ffffff"; ctx.font="900 13px system-ui,sans-serif";
+  ctx.fillText(`${tr("lvl")} ${S.level}`,14,bot-22);
+  ctx.fillStyle="#00000030"; ctx.fillRect(14,bot-16,90,5);
+  ctx.fillStyle="#ffd23f";  ctx.fillRect(14,bot-16,90*clamp(S.xpInLevel/need,0,1),4);
+  if(S.rebirths>0){
+    ctx.fillStyle="#a78bfa"; ctx.font="700 11px system-ui,sans-serif";
+    ctx.fillText(`🌀×${(1+S.rebirths*CONFIG.REBIRTH_MULT_GAIN).toFixed(1)}`,112,bot-18);
+  }
+};
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   JUICE — the "loud" layer: hit-stop, zoom punch, shockwaves, praise
+   words, FEVER, live NEW BEST, near-miss drama. Presentation only —
+   it reads game state but never changes hits, scores or difficulty,
+   so the challenge stays 100% skill-driven.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Juice={
+  init(){
+    for(let i=0;i<8;i++) Game.waves.push({on:false,x:0,y:0,r:0,maxR:0,life:0,maxLife:1,color:"#fff",w:4});
+  },
+  wave(x,y,r0,r1,life,color,w){
+    for(const v of Game.waves){
+      if(!v.on){ v.on=true;v.x=x;v.y=y;v.r=r0;v.r0=r0;v.maxR=r1;v.life=v.maxLife=life;v.color=color;v.w=w; return; }
+    }
+  },
+  say(txt,color,size=44){
+    const w=Game.word; w.txt=txt; w.color=color; w.size=size; w.age=0;
+  },
+  fever(){ return Game.combo>=CONFIG.JUICE_FEVER_COMBO; },
+
+  perfect(ring,combo){
+    const c=UI.trailColor(), fev=combo>=CONFIG.JUICE_FEVER_COMBO;
+    Game.fx.hitstop=CONFIG.JUICE_HITSTOP_S*(fev?1.6:1);
+    Game.fx.punch=1;
+    if(combo===CONFIG.JUICE_FEVER_COMBO) Game.fx.flash=Math.max(Game.fx.flash,0.7);   // only on entering FEVER
+    // shockwaves stay well short of the next target so aiming stays clean
+    this.wave(ring.x,ring.y,ring.r,ring.r*2.2,0.4,c,6);
+    if(combo>=3) this.wave(ring.x,ring.y,ring.r*0.5,ring.r*2.8,0.5,"#ffffff",3);
+    Audio2.boom(combo);
+    const W=tr("words"), word=W[Math.min(combo-1,W.length-1)];
+    if(word){ this.say(word,fev?"#ffffff":c,38+combo*3); Audio2.stinger(combo); }
+    if(combo===CONFIG.JUICE_FEVER_COMBO){
+      Game.float(ring.x,ring.y+ring.r+34,tr("fever"),"#ffc94d",22);
+      Particles.burst(ring.x,ring.y,"#ffc94d",24,300);
+    }
+    if(combo>=CONFIG.COMBO_MAX){                       // max combo: everything
+      Particles.burst(ring.x,ring.y,"#ffffff",20,320);
+      Game.fx.shake=Math.max(Game.fx.shake,1);
+    }
+    const h=window.Capacitor?.Plugins?.Haptics;
+    if(fev&&h) h.impact({style:"HEAVY"}).catch(()=>{});
+  },
+  hit(ring){
+    this.wave(ring.x,ring.y,ring.r,ring.r*1.8,0.3,"#ffffff",3);
+    Game.fx.punch=Math.max(Game.fx.punch,0.35);
+  },
+  newBest(ring){
+    this.say(tr("say_new_best"),"#ffc94d",50);
+    Audio2.fanfare(); Haptics.perfect();
+    for(let i=0;i<3;i++) Particles.perfectFX(ring.x,ring.y,ring.r,UI.trailColor(),{style:"confetti"});
+    Game.fx.flash=1;
+  },
+  saved(ring,margin){
+    this.say(tr("saved"),"#3dffb4",48);
+    this.wave(ring.x,ring.y,ring.r,ring.r*2.4,0.5,"#3dffb4",7);
+    Audio2.blip(330,880,0.25,"triangle",0.35); Audio2.blip(660,1320,0.2,"sine",0.2,0.08);
+    Haptics.hit(); Game.fx.shake=Math.max(Game.fx.shake,0.5);
+    Game.float(ring.x,ring.y+ring.r+30,tr("free_save"),"#ffffff",16);
+  },
+  death(margin){
+    if(margin!==null&&margin<=CONFIG.NEAR_MISS_SHOW_PX){
+      this.say(tr("so_close"),"#ff5e8a",46);
+      Audio2.soClose();
+      Game.float(Game.dot.x,Game.dot.y-24,`${Math.max(1,Math.round(margin))}px!`,"#ff5e8a",22);
+    }
+  },
+
+  update(dt){
+    const f=Game.fx;
+    if(f.punch>0) f.punch=Math.max(0,f.punch-dt*5);
+    if(f.scorePop>0) f.scorePop=Math.max(0,f.scorePop-dt*5);
+    if(f.flash>0) f.flash=Math.max(0,f.flash-dt*3);
+    Game.word.age+=dt;
+    for(const v of Game.waves){
+      if(!v.on) continue;
+      v.life-=dt; if(v.life<=0){ v.on=false; continue; }
+      const p=1-v.life/v.maxLife;
+      v.r=v.r0+(v.maxR-v.r0)*(1-Math.pow(1-p,3));
+    }
+  },
+
+  drawWorld(ctx,cam){
+    // shockwave rings
+    for(const v of Game.waves){
+      if(!v.on) continue;
+      const a=v.life/v.maxLife;
+      ctx.globalAlpha=a*0.8; ctx.strokeStyle=v.color; ctx.lineWidth=v.w*a+1;
+      ctx.beginPath(); ctx.arc(v.x,v.y-cam,v.r,0,TAU); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  },
+  drawScreen(ctx,vw,vh,inRun){
+    const low=Game.lowFX();
+    // FEVER: pulsing edge glow in the trail colour while the combo is hot
+    if(inRun&&this.fever()&&!low){
+      const pulse=0.07+0.04*Math.sin(Game.time*10);
+      const g=ctx.createRadialGradient(vw/2,vh/2,vh*0.3,vw/2,vh/2,vh*0.75);
+      g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,UI.trailColor());
+      ctx.globalAlpha=pulse; ctx.fillStyle=g; ctx.fillRect(-20,-20,vw+40,vh+40);
+      ctx.globalAlpha=1;
+    }
+    // full-screen flash on PERFECT / NEW BEST
+    if(Game.fx.flash>0&&!low){
+      ctx.globalAlpha=Game.fx.flash*0.10; ctx.fillStyle="#ffffff";
+      ctx.fillRect(-20,-20,vw+40,vh+40); ctx.globalAlpha=1;
+    }
+    // praise word: overshoot pop-in, hold, float up and fade
+    const w=Game.word;
+    if(w.age<1.1&&w.txt){
+      const pop=w.age<0.12?w.age/0.12*1.35:w.age<0.22?1.35-(w.age-0.12)/0.1*0.35:1;
+      const a=w.age>0.8?1-(w.age-0.8)/0.3:1;
+      ctx.save();
+      // below the orbit ring: never covers the ring you're aiming at
+      ctx.translate(vw/2,vh*0.82-w.age*18);
+      ctx.font=`900 ${w.size}px system-ui,sans-serif`;
+      const fit=Math.min(1,vw*0.86/ctx.measureText(w.txt).width);
+      ctx.scale(pop*fit,pop*fit);
+      ctx.globalAlpha=clamp(a,0,1);
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.font=`900 ${w.size}px system-ui,sans-serif`;
+      ctx.lineWidth=8; ctx.lineJoin="round"; ctx.strokeStyle="rgba(36,16,122,.9)"; ctx.strokeText(w.txt,0,0);
+      ctx.fillStyle=w.color; ctx.fillText(w.txt,0,0);
+      ctx.restore();
+      ctx.textBaseline="alphabetic";
+    }
+  },
+};
+</script>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════
+   UI — DOM screens, toasts, unlock browser, and screen flow.
+   ═══════════════════════════════════════════════════════════════════════ */
+const UI={
+  curTab:"trail",
+  pendingBuy:null, pendingBuyT:0,    // two-tap purchase state
+  rebirthArmed:false, rebirthT:0,    // two-tap rebirth state
+  trailColor(){ return trailItem(S.equip.trail).c; },
+
+  init(){
+    $("btn-play").addEventListener("click",()=>{ Audio2.ensure(); Audio2.ui(); Game.startRun(); });
+    // Leaving the over screen = revive declined → a pending interstitial
+    // (3rd-death cadence) may fire now, never earlier.
+    $("btn-retry").addEventListener("click",()=>{ Ads.reviveDeclined(); Audio2.ui(); Game.startRun(); });
+    $("btn-home").addEventListener("click",()=>{ Ads.reviveDeclined(); Audio2.ui(); this.home(); });
+    // one-tap retry: any tap on the over screen that isn't a button.
+    // A short guard stops the tap that caused the death from skipping it.
+    $("over").addEventListener("click",e=>{
+      if(e.target.closest("button")) return;
+      if(performance.now()-(this.overShownAt||0)<450) return;
+      Ads.reviveDeclined(); Audio2.ui(); Game.startRun();
+    });
+    $("btn-pause").addEventListener("click",()=>this.pause());
+    $("btn-resume").addEventListener("click",()=>this.resume());
+    $("btn-p-restart").addEventListener("click",()=>{ Audio2.ui(); Game.startRun(); });
+    $("btn-p-home").addEventListener("click",()=>{ Audio2.ui(); this.home(); });
+    $("btn-sound").addEventListener("click",()=>{
+      S.muted=!S.muted; save(); this.refreshHome();
+      if(S.muted){ Music.stop(); Audio2.suspend(); } else { Audio2.ensure(); Audio2.ui(); Music.play(Music.want); }
+    });
+    $("btn-music").addEventListener("click",()=>{
+      S.musicOn=!S.musicOn; save(); this.refreshHome(); Audio2.ui();
+      if(S.musicOn) Music.play(Music.want); else Music.stop();
+    });
+    // Mobile autoplay rules: audio may only start inside a user gesture.
+    // On phones a touch only counts as "activation" on touchend /
+    // pointerup / click — NOT on pointerdown (that's why the menu track
+    // used to stay silent until a button was pressed). So listen to all
+    // of them; the first real one wakes the context and starts the track,
+    // and any tap after the app was backgrounded wakes it again.
+    const wake=()=>{
+      if(!Music.enabled()) return;
+      Audio2.ensure();
+      Audio2.unlockIOS();
+      if(!Music.song) Music.play(Game.state==="playing"||Game.state==="dying"?"game":"menu");
+    };
+    for(const ev of ["pointerdown","pointerup","touchend","click","keydown"])
+      document.addEventListener(ev,wake,{capture:true,passive:true});
+    $("btn-fx").addEventListener("click",()=>{
+      S.lowFX=!S.lowFX; save(); Game.resize(); this.refreshHome(); Audio2.ui();
+    });
+    // Two-tap confirm — native confirm() dialogs are silently blocked in
+    // sandboxed WebViews/previews, so no blocking dialogs anywhere.
+    $("btn-rebirth").addEventListener("click",()=>{
+      if(this.rebirthArmed){
+        clearTimeout(this.rebirthT); this.rebirthArmed=false;
+        Progress.rebirth(); return;
+      }
+      const mult=(1+(S.rebirths+1)*CONFIG.REBIRTH_MULT_GAIN).toFixed(1);
+      this.rebirthArmed=true; Audio2.ui();
+      $("btn-rebirth").textContent=tr("rebirth_confirm",{m:mult});
+      this.rebirthT=setTimeout(()=>{ this.rebirthArmed=false; this.refreshHome(); },3500);
+    });
+    $("btn-unlocks").addEventListener("click",()=>{ Audio2.ui(); this.showScreen("unlocks"); this.renderUnlocks(); });
+    $("btn-u-back").addEventListener("click",()=>{ Audio2.ui(); this.home(); });
+    document.querySelectorAll("#unlocks .tabs button").forEach(b=>{
+      b.addEventListener("click",()=>{
+        this.curTab=b.dataset.tab; Audio2.ui();
+        document.querySelectorAll("#unlocks .tabs button").forEach(x=>x.classList.toggle("on",x===b));
+        this.renderUnlocks();
+      });
+    });
+    $("btn-doublexp").addEventListener("click",()=>Ads.rewardDoubleXP());
+    $("btn-continue").addEventListener("click",()=>Ads.rewardContinue());
+    $("btn-coinrevive").addEventListener("click",()=>Game.coinRevive());
+    $("btn-privacy").addEventListener("click",()=>Ads.showPrivacyOptions());
+    $("btn-lang").addEventListener("click",()=>{ Audio2.ui(); Lang.next(); });
+    // Web build (Netlify / desktop browser): ads and Play Billing can't
+    // run, so hide their entry points instead of showing dead buttons.
+    // Coin revive stays — it works everywhere.
+    if(!Ads.plugin()){
+      for(const id of ["btn-continue","btn-doublexp","btn-privacy"]) $(id).classList.add("hidden");
+    }
+    if(!Billing.plugin()) document.querySelector('#unlocks .tabs button[data-tab="coins"]').classList.add("hidden");
+    this.applyScheme();
+    this.applyLang();
+  },
+  /* fill every [data-i18n] element, then redraw the dynamic text */
+  applyLang(){
+    document.querySelectorAll("[data-i18n]").forEach(el=>{ el.textContent=tr(el.dataset.i18n); });
+    this.refreshHome();
+    if(!$("unlocks").classList.contains("hidden")) this.renderUnlocks();
+  },
+
+  showScreen(name){ // null = none (in game)
+    for(const id of ["start","over","pause","unlocks"])
+      $(id).classList.toggle("hidden",id!==name);
+    if(name!==null) $("btn-pause").style.display="none";
+  },
+  home(){
+    Game.state="menu"; Awake.off();
+    Music.play("menu");
+    this.refreshHome(); this.showScreen("start");
+  },
+  refreshHome(){
+    $("s-best").textContent=S.best;
+    $("s-coins").textContent=S.coins;
+    $("shop-dot").classList.toggle("hidden",!this.shopHasNew());
+    $("s-streak").textContent=S.streak;
+    $("s-rebirth").textContent=S.rebirths>0?`REBIRTH ×${(1+S.rebirths*CONFIG.REBIRTH_MULT_GAIN).toFixed(1)}`:"XP ×"+xpMult().toFixed(1);
+    $("s-level").textContent=S.level;
+    const need=xpForLevel(S.level);
+    $("s-xptext").textContent=`${S.xpInLevel} / ${need} XP`;
+    $("s-xpfill").style.width=`${clamp(S.xpInLevel/need*100,0,100)}%`;
+    $("btn-sound").textContent=S.muted?"🔇":"🔊";
+    $("btn-music").textContent=tr(S.musicOn?"music_on":"music_off");
+    $("btn-music").style.opacity=S.muted?".45":"";
+    $("btn-fx").textContent=tr(S.lowFX?"fx_lo":"fx_hi");
+    $("btn-lang").textContent="🌐 "+Lang.NAMES[Lang.cur];
+    $("btn-rebirth").classList.toggle("hidden",!Progress.rebirthAvailable());
+    if(!this.rebirthArmed) $("btn-rebirth").textContent=tr("rebirth_btn");
+    this.renderMissions();
+  },
+  renderMissions(id="s-missions",showGain=false){
+    const el=$(id); el.innerHTML="";
+    for(const m of S.missions){
+      const div=document.createElement("div");
+      div.className="mission"+(m.p>=m.n?" done":"");
+      const was=Missions.before?.get(Missions.key(m));
+      const gain=showGain&&was!==undefined&&m.p>was?`<span class="up">▲${m.p-was}</span>`:"";
+      div.innerHTML=`<span>🎯 ${Missions.text(m)}</span><span class="mprog">${Math.min(m.p,m.n)}/${m.n}${gain} · +${m.xp}xp</span>`;
+      el.appendChild(div);
+    }
+  },
+
+  pause(){
+    if(Game.state!=="playing") return;
+    Game.state="paused";
+    Audio2.suspend(); Awake.off();
+    this.showScreen("pause");
+  },
+  resume(){
+    if(Game.state!=="paused") return;
+    this.showScreen(null);
+    $("btn-pause").style.display="block";
+    Audio2.ensure(); Awake.on();
+    Game.state="playing";
+  },
+
+  gameOver(){
+    Game.state="over";
+    Awake.off();
+    const score=Game.score;
+    const wasBest=score>S.best;
+    // near-miss feedback: the "one more run" hook
+    const m=Game.missMargin;
+    $("o-miss").textContent = m!==null ? tr("missed_by",{n:Math.max(1,Math.round(m))}) : "";
+    // headline = the "so close, again!" hook, shown first and biggest
+    const gap=S.best-score, head=$("o-head");
+    head.classList.remove("calm");
+    if(wasBest&&S.best>0)                   head.textContent=tr("head_new_best");
+    else if(wasBest)                        head.textContent=tr("head_first");
+    else if(gap===0)                        head.textContent=tr("head_tied");
+    else if(gap<=Math.max(3,Math.ceil(S.best*0.25))) head.textContent=tr("head_only",{n:gap});
+    else if(m!==null&&m<=CONFIG.NEAR_MISS_SHOW_PX)    head.textContent=tr("so_close");
+    else { head.textContent=tr("head_calm",{n:S.best}); head.classList.add("calm"); }
+    // ghost bar: this run vs best, marker = previous run
+    const ref=Math.max(S.best,score,1);
+    $("o-you").style.width=`${clamp(score/ref*100,0,100)}%`;
+    $("o-mark").style.left=`${clamp(S.lastRun/ref*100,0,100)}%`;
+    $("o-bestn").textContent=Math.max(S.best,score);
+    if(wasBest){ S.best=score; Audio2.unlock(); }
+    this.countUp($("o-score"),score);
+    $("o-xp").textContent=`+${Game.runXPGained} XP`;
+    // coin payout: score-scaled + a bonus per PERFECT landed
+    const coinsEarned=Math.round(score*CONFIG.COINS_PER_SCORE)+Game.runPerfects*CONFIG.COINS_COMBO_BONUS;
+    S.coins+=coinsEarned;
+    $("o-coins").textContent=`+${coinsEarned} 🪙 (${S.coins})`;
+    $("o-level").textContent=S.level;
+    const need=xpForLevel(S.level);
+    $("o-xptext").textContent=`${S.xpInLevel} / ${need} XP`;
+    $("o-xpfill").style.width=`${clamp(S.xpInLevel/need*100,0,100)}%`;
+    // revive paths (both resolve BEFORE any pending interstitial):
+    // ad continue once per run; coin continue at an escalating price
+    // offers you can't take are hidden, not greyed out — less clutter
+    if(Ads.plugin()) $("btn-continue").classList.toggle("hidden",Game.revived||!Ads.rewardedReady());
+    const revPrice=Game.nextRevivePrice();
+    $("o-revcost").textContent=revPrice;
+    $("btn-coinrevive").classList.toggle("hidden",S.coins<revPrice);
+    $("btn-doublexp").disabled=Game.runXPGained<=0||!Ads.rewardedReady();
+    S.lastRun=score;
+    S.runsPlayed++; S.deaths++;
+    Missions.progress({run:true,score});
+    this.renderMissions("o-missions",true);
+    save();
+    this.showScreen("over");
+    this.overShownAt=performance.now();
+    Music.play("game");        // keep the energy up — next run is one tap away
+    Ads.onGameOver();       // marks interstitial pending; fires only after revive is resolved
+  },
+
+  /* re-sync the game-over screen's level/XP bar (after rewarded 2× XP) */
+  gameOverXPRefresh(){
+    $("o-level").textContent=S.level;
+    const need=xpForLevel(S.level);
+    $("o-xptext").textContent=`${S.xpInLevel} / ${need} XP`;
+    $("o-xpfill").style.width=`${clamp(S.xpInLevel/need*100,0,100)}%`;
+  },
+
+  /* game-over score ticks up instead of appearing — reads as a payout */
+  countUp(el,to){
+    const t0=performance.now(), dur=Math.min(900,250+to*25);
+    const step=now=>{
+      const p=clamp((now-t0)/dur,0,1), v=Math.round(to*(1-Math.pow(1-p,3)));
+      el.textContent=v;
+      if(p<1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  },
+
+  toast(txt,big=false){
+    const box=$("toasts");   // cap the stack: a burst of unlocks/level-ups
+    while(box.children.length>=4) box.firstChild.remove();
+    const div=document.createElement("div");
+    div.className="toast"+(big?" big":"");
+    div.textContent=txt;
+    $("toasts").appendChild(div);
+    setTimeout(()=>div.remove(),3200);
+  },
+  levelFx(lvl){
+    const el=$("lvlfx");
+    $("lvlfx-num").textContent=lvl;
+    el.classList.remove("on");
+    void el.offsetWidth;      // restart CSS animation
+    el.classList.add("on");
+    setTimeout(()=>el.classList.remove("on"),1200);
+  },
+
+  /* ── SHOP ──────────────────────────────────────────────────────────
+     Hybrid model (chosen for continuity with the existing XP curve):
+     lifetime XP unlocks a TIER's availability (unlockCost — the same
+     endless thresholds as before), coins BUY the item (coinPrice).
+     Item states: XP-locked → buyable (+NEW badge) → owned → equipped. */
+  renderUnlocks(){
+    $("u-xp").textContent=S.lifetimeXP;
+    $("u-coins").textContent=S.coins;
+    const grid=$("u-grid"); grid.innerHTML="";
+    const cat=this.curTab;
+    if(cat==="coins"){ this.renderCoinsTab(grid); return; }
+    grid.style.gridTemplateColumns="";   // restore 4-col grid after coins tab
+    const avail=unlockedCount();        // XP-availability (shared tier curve)
+    const seen=S.shopSeen[cat];
+    for(let i=0;i<avail+4;i++){         // tease the next 4 XP-locked tiers
+      const cell=document.createElement("button");
+      cell.className="cell";
+      const item=CAT_ITEM[cat](i);
+      // cell IS the preview: swatch / gradient / glyph in the item's style
+      if(cat==="trail")      cell.style.background=item.c;
+      else if(cat==="skin"){ cell.style.background="#3a1f9e"; cell.style.color=item.c; cell.textContent=item.shape; }
+      else if(cat==="bg")    cell.style.background=`linear-gradient(${item.top},${item.bot})`;
+      else if(cat==="sound"){cell.style.background="#3a1f9e"; cell.style.fontSize="22px"; cell.textContent="♪"; }
+      else{                  cell.style.background="#3a1f9e"; cell.style.fontSize="20px"; cell.textContent="✹"; }
+      cell.title=item.name;
+      const owned=S.owned[cat].includes(i);
+      if(i>=avail){                     // XP-locked: needs more lifetime XP
+        cell.classList.add("lock");
+        cell.innerHTML+=`<div class="cost">⭐${unlockCost(i)}xp</div>`;
+        // a dead tap reads as broken — explain the gate instead
+        cell.addEventListener("click",()=>{
+          Audio2.ui();
+          this.toast(tr("locked",{cost:unlockCost(i),xp:S.lifetimeXP}));
+        });
+      }else if(!owned){                 // available: coins buy it (two-tap)
+        const armed=this.pendingBuy&&this.pendingBuy.cat===cat&&this.pendingBuy.i===i;
+        if(armed) cell.classList.add("arm");
+        cell.innerHTML+=`<div class="cost">${armed?tr("tap_buy_cell"):"🪙"+coinPrice(i)}</div>`;
+        if(i>=seen&&!armed) cell.innerHTML+=`<div class="badge">${tr("new_badge")}</div>`;
+        cell.addEventListener("click",()=>this.buy(cat,i));
+      }else{                            // owned: tap to equip (+preview)
+        if(S.equip[cat]===i) cell.classList.add("eq");
+        cell.addEventListener("click",()=>{
+          S.equip[cat]=i; save(); Haptics.tap();
+          if(cat==="sound") Audio2.preview(i); else Audio2.ui();
+          if(cat==="trail") this.applyScheme();
+          if(cat==="fx")    // live demo burst behind the translucent panel
+            Particles.perfectFX(Game.vw/2,Game.camY+Game.vh/2,40,this.trailColor(),fxItem(i));
+          this.renderUnlocks();
+        });
+      }
+      grid.appendChild(cell);
+    }
+    S.shopSeen[cat]=avail; save();      // this tab's tiers are now "seen"
+    $("shop-dot").classList.toggle("hidden",!this.shopHasNew());
+  },
+  /* two-tap purchase (no confirm() — blocked in sandboxed WebViews):
+     first tap arms the cell + previews, second tap within 3s buys. */
+  buy(cat,i){
+    const price=coinPrice(i), item=CAT_ITEM[cat](i);
+    if(S.coins<price){
+      if(cat==="sound") Audio2.preview(i);
+      this.toast(tr("need_more",{n:price-S.coins,name:item.name}));
+      return;
+    }
+    const armed=this.pendingBuy&&this.pendingBuy.cat===cat&&this.pendingBuy.i===i;
+    if(!armed){
+      clearTimeout(this.pendingBuyT);
+      this.pendingBuy={cat,i};
+      if(cat==="sound") Audio2.preview(i); else Audio2.ui();
+      this.toast(tr("tap_buy",{name:item.name,n:price}));
+      this.pendingBuyT=setTimeout(()=>{ this.pendingBuy=null; this.renderUnlocks(); },3000);
+      this.renderUnlocks();
+      return;
+    }
+    clearTimeout(this.pendingBuyT); this.pendingBuy=null;
+    S.coins-=price; S.owned[cat].push(i); S.equip[cat]=i;
+    save(); Audio2.unlock(); Haptics.perfect();
+    this.toast(tr("equipped",{name:item.name}),true);
+    if(cat==="trail") this.applyScheme();
+    this.renderUnlocks();
+  },
+  /* 🪙+ tab: real-money coin packs + Remove Ads + Restore (Play Billing).
+     In a browser these no-op with a toast — see the Billing module. */
+  renderCoinsTab(grid){
+    grid.style.gridTemplateColumns="1fr";  // full-width rows, not swatches
+    CONFIG.IAP_COIN_PACKS.forEach((p,idx)=>{
+      const b=document.createElement("button");
+      b.className="packrow";
+      b.innerHTML=`<span>💰 ${tr("pack_"+["small","medium","large","mega"][Math.min(idx,3)])}</span><b>${p.coins.toLocaleString()} 🪙</b>`;
+      b.addEventListener("click",()=>Billing.buyCoinPack(idx));
+      grid.appendChild(b);
+    });
+    const ra=document.createElement("button");
+    ra.className="packrow";
+    if(S.removeAds){
+      ra.disabled=true;
+      ra.innerHTML=`<span>${tr("ads_removed")}</span><b>${tr("thanks")}</b>`;
+    }else{
+      ra.innerHTML=`<span>${tr("remove_ads")}</span><b>${tr("remove_ads_desc")}<br><small>${tr("remove_ads_note")}</small></b>`;
+      ra.addEventListener("click",()=>Billing.buyRemoveAds());
+    }
+    grid.appendChild(ra);
+    const rs=document.createElement("button");
+    rs.className="packrow"; rs.style.opacity=".7";
+    rs.innerHTML=`<span>${tr("restore")}</span>`;
+    rs.addEventListener("click",()=>Billing.restore());
+    grid.appendChild(rs);
+  },
+  shopHasNew(){                          // any buyable tier not yet seen?
+    const avail=unlockedCount();
+    return SHOP_CATS.some(c=>avail>S.shopSeen[c]);
+  },
+  /* equipped colour scheme drives the trail AND the UI accent palette */
+  applyScheme(){
+    document.documentElement.style.setProperty("--accent",this.trailColor());
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ADS — AdMob via @capacitor-community/admob + Google UMP consent.
+
+   Wired but inert outside the native app: every entry point feature-
+   detects the plugin and no-ops with a console log, so browser dev
+   never crashes and never even touches ad code paths.
+
+   Placement policy:
+   · Banner       → anchored bottom, shown once at app start; its height
+                    is fed into --banner-h so no UI sits behind it.
+   · Interstitial → on game-over, only every Nth death
+                    (CONFIG.ADS_INTERSTITIAL_EVERY_N_DEATHS) AND at most
+                    once per ADS_INTERSTITIAL_MIN_INTERVAL_S seconds —
+                    and NEVER while a rewarded "continue" is still on the
+                    table: an eligible interstitial goes PENDING and only
+                    fires once revive is unavailable or declined (Retry/
+                    Home). Watching any rewarded ad cancels it for that
+                    death: the rewarded impression always wins.
+   · Rewarded     → user-initiated only: "2× XP" and "CONTINUE" buttons
+                    on the game-over screen.
+   · UMP consent  → requested BEFORE initialize/ads, per Google policy;
+                    "Privacy & ad options" button re-shows the form.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Ads={
+  interstitialLoaded:false, rewardedLoaded:false,
+  lastInterstitialAt:0, pendingReward:null, doubleXPUsed:false,
+  interstitialPending:false,   // cadence-eligible, waiting on the revive decision
+
+  plugin(){ return (CONFIG.ADS_ENABLED && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.AdMob) || null; },
+
+  async init(){
+    const AdMob=this.plugin();
+    if(!AdMob){ console.log("[ads] AdMob plugin not available — ads disabled (browser/dev mode)"); return; }
+    try{
+      /* ── 1. UMP consent flow (GDPR/UK/US-state). Must complete before
+             ads are requested. Inert outside consent regions. ───────── */
+      try{
+        const info=await AdMob.requestConsentInfo({});
+        if(info?.isConsentFormAvailable && info?.status==="REQUIRED"){
+          await AdMob.showConsentForm();
+        }
+        S.consentDone=true; save();
+      }catch(e){ console.warn("[ads] consent flow failed (continuing)",e); }
+
+      /* ── 2. SDK init. ADS_TESTING_MODE requests test ads everywhere. ── */
+      await AdMob.initialize({ initializeForTesting: CONFIG.ADS_TESTING_MODE });
+
+      /* ── 3. Event listeners (loaded/dismissed/reward) ────────────── */
+      AdMob.addListener("bannerAdSizeChanged",(size)=>{
+        // reserve layout space so the banner never covers game UI
+        const h=clamp(Math.round(size?.height||0),0,140);
+        document.documentElement.style.setProperty("--banner-h",h+"px");
+        Game.resize();
+      });
+      AdMob.addListener("onInterstitialAdLoaded",()=>{ this.interstitialLoaded=true; });
+      AdMob.addListener("onInterstitialAdDismissed",()=>{ this.interstitialLoaded=false; this.prepInterstitial(); });
+      AdMob.addListener("onRewardedVideoAdLoaded",()=>{ this.rewardedLoaded=true; });
+      AdMob.addListener("onRewardedVideoAdReward",()=>{ this.grantPendingReward(); });
+      AdMob.addListener("onRewardedVideoAdDismissed",()=>{ this.rewardedLoaded=false; this.pendingReward=null; this.prepRewarded(); });
+
+      /* ── 4. Banner up immediately, full-screen formats pre-loaded.
+             Remove-Ads IAP suppresses banner + interstitial ONLY —
+             rewarded ads stay live (players opt in for the reward). ── */
+      if(S.removeAds){
+        console.log("[ads] Remove-Ads owned — banner/interstitial suppressed");
+      }else{
+        await AdMob.showBanner({
+          adId: CONFIG.BANNER_AD_UNIT_ID,
+          adSize: "ADAPTIVE_BANNER",
+          position: "BOTTOM_CENTER",
+          margin: 0,
+          isTesting: CONFIG.ADS_TESTING_MODE,
+        });
+        this.prepInterstitial();
+      }
+      this.prepRewarded();   // ALWAYS — rewarded is exempt from Remove-Ads
+      console.log("[ads] initialized");
+    }catch(e){ console.warn("[ads] init failed — continuing without ads",e); }
+  },
+
+  async prepInterstitial(){
+    const AdMob=this.plugin(); if(!AdMob) return;
+    try{ await AdMob.prepareInterstitial({ adId: CONFIG.INTERSTITIAL_AD_UNIT_ID, isTesting: CONFIG.ADS_TESTING_MODE }); }
+    catch(e){ console.warn("[ads] interstitial prepare failed",e); }
+  },
+  async prepRewarded(){
+    const AdMob=this.plugin(); if(!AdMob) return;
+    try{ await AdMob.prepareRewardVideoAd({ adId: CONFIG.REWARDED_AD_UNIT_ID, isTesting: CONFIG.ADS_TESTING_MODE }); }
+    catch(e){ console.warn("[ads] rewarded prepare failed",e); }
+  },
+
+  rewardedReady(){ return this.rewardedLoaded; },
+
+  /* game-over hook: decide interstitial ELIGIBILITY only — never show
+     here. The revive decision resolves first (see reviveDeclined /
+     showRewarded); the interstitial fires only after it. */
+  onGameOver(){
+    this.doubleXPUsed=false;
+    const AdMob=this.plugin();
+    if(!AdMob){ console.log("[ads] (no-op) interstitial check, death #"+S.deaths); return; }
+    const everyN=CONFIG.ADS_INTERSTITIAL_EVERY_N_DEATHS;
+    const cooled=(Date.now()-this.lastInterstitialAt)/1000>=CONFIG.ADS_INTERSTITIAL_MIN_INTERVAL_S;
+    // Remove-Ads layers ON TOP of the cadence + revive gate (kills the
+    // interstitial outright; the rest of the gate logic is unchanged)
+    this.interstitialPending=!S.removeAds && this.interstitialLoaded && cooled && S.deaths%everyN===0;
+    // Revive not on offer this death (ad continue spent AND coins short)?
+    // Then there's nothing to contend with — resolve immediately.
+    const reviveOffered=(!Game.revived && this.rewardedLoaded) || S.coins>=Game.nextRevivePrice();
+    if(!reviveOffered) this.flushInterstitial();
+  },
+  /* player passed on revive: Retry / Home tapped on the over screen */
+  reviveDeclined(){ this.flushInterstitial(); },
+  async flushInterstitial(){
+    if(S.removeAds){ this.interstitialPending=false; return; }  // IAP guard
+    if(!this.interstitialPending) return;
+    this.interstitialPending=false;
+    const AdMob=this.plugin(); if(!AdMob) return;
+    try{
+      Audio2.suspend();               // never play game audio under an ad
+      await AdMob.showInterstitial();
+      this.lastInterstitialAt=Date.now();
+    }catch(e){ console.warn("[ads] interstitial show failed",e); this.prepInterstitial(); }
+  },
+
+  async showRewarded(kind){
+    const AdMob=this.plugin();
+    if(!AdMob){ console.log("[ads] (no-op) rewarded requested:",kind); return; }
+    if(!this.rewardedLoaded) return;
+    this.interstitialPending=false;   // rewarded impression wins this death
+    this.pendingReward=kind;
+    try{ Audio2.suspend(); await AdMob.showRewardVideoAd(); }
+    catch(e){ console.warn("[ads] rewarded show failed",e); this.pendingReward=null; this.prepRewarded(); }
+  },
+  rewardDoubleXP(){
+    if(this.doubleXPUsed) return;
+    this.showRewarded("doublexp");
+  },
+  rewardContinue(){
+    if(Game.revived) return;
+    this.showRewarded("continue");
+  },
+  /* fires only on the SDK's reward event → user finished the ad */
+  grantPendingReward(){
+    const kind=this.pendingReward; this.pendingReward=null;
+    if(kind==="doublexp"){
+      this.doubleXPUsed=true;
+      const extra=Math.round(Game.runXPGained*(CONFIG.REWARDED_DOUBLE_XP_MULT-1));
+      Progress.gainXP(extra,true);      // raw: multipliers already applied
+      Game.runXPGained+=extra;
+      $("o-xp").textContent=`+${Game.runXPGained} XP (${CONFIG.REWARDED_DOUBLE_XP_MULT}×!)`;
+      $("btn-doublexp").disabled=true;
+      UI.toast(tr("bonus_xp",{n:extra}),true);
+      UI.gameOverXPRefresh?.();
+    }else if(kind==="continue"){
+      UI.toast(tr("run_continues"),true);
+      Game.revive(true);   // true = consumes the once-per-run AD continue
+    }
+  },
+
+  /* Remove-Ads purchased (or restored) mid-session: take the banner
+     down and give its reserved space back. Rewarded ads UNTOUCHED —
+     the continue/2×XP buttons must keep working after the purchase. */
+  async applyRemoveAds(){
+    this.interstitialPending=false;
+    const AdMob=this.plugin(); if(!AdMob) return;
+    try{
+      await AdMob.removeBanner();
+      document.documentElement.style.setProperty("--banner-h","0px");
+      Game.resize();
+    }catch(e){ console.warn("[ads] banner removal failed",e); }
+  },
+
+  /* "Privacy & ad options" — re-show the UMP form so users can change
+     consent any time (required by Google in consent regions). */
+  async showPrivacyOptions(){
+    const AdMob=this.plugin();
+    if(!AdMob){ UI.toast(tr("privacy_web")); return; }
+    try{
+      if(typeof AdMob.showPrivacyOptionsForm==="function") await AdMob.showPrivacyOptionsForm();
+      else await AdMob.showConsentForm();
+    }catch(e){ console.warn("[ads] privacy form unavailable",e); }
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BILLING — Google Play Billing via @capgo/native-purchases (pinned
+   7.19.3, Capacitor-7 line). Same feature-detection pattern as Ads:
+   in a browser every entry point no-ops with a console log.
+
+   Products (all placeholder IDs in CONFIG):
+   · Coin packs   → consumables, repeat-purchasable, grant into S.coins
+                    (the same save the shop already spends from).
+   · Remove Ads   → non-consumable, persisted as S.removeAds; kills
+                    banner + interstitial ONLY. Rewarded ads are exempt
+                    by design — players opt into those for rewards.
+   · Restore      → Play requires non-consumables to be restorable;
+                    re-grants Remove-Ads found in purchase history.
+   Test with Play's License Testing accounts (Play Console → Settings →
+   License testing) — testers see test-card purchase flows, no charge.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Billing={
+  plugin(){ return (CONFIG.IAP_ENABLED && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.NativePurchases) || null; },
+
+  async init(){
+    const NP=this.plugin();
+    if(!NP){ console.log("[iap] billing plugin not available — purchases disabled (browser/dev mode)"); return; }
+    try{ // warm the product cache so the store sheet opens instantly
+      await NP.getProducts({
+        productIdentifiers:[...CONFIG.IAP_COIN_PACKS.map(p=>p.productId),CONFIG.IAP_REMOVE_ADS_PRODUCT_ID],
+        productType:"inapp",
+      });
+      console.log("[iap] initialized");
+    }catch(e){ console.warn("[iap] product query failed (continuing)",e); }
+  },
+
+  async buyCoinPack(idx){
+    const pack=CONFIG.IAP_COIN_PACKS[idx];
+    const NP=this.plugin();
+    if(!NP){
+      console.log("[iap] (no-op) coin pack purchase:",pack.productId);
+      UI.toast(tr("iap_web"));
+      return;
+    }
+    try{
+      // resolves only on a completed purchase; throws on cancel/failure
+      await NP.purchaseProduct({ productIdentifier:pack.productId, productType:"inapp", quantity:1 });
+      this.grantCoins(pack.coins);
+    }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
+  },
+  grantCoins(n){
+    S.coins+=n; save();               // same persistence the shop spends
+    Audio2.unlock(); Haptics.perfect();
+    UI.toast(tr("coins_added",{n}),true);
+    UI.refreshHome();
+    if(!$("unlocks").classList.contains("hidden")) UI.renderUnlocks();
+  },
+
+  async buyRemoveAds(){
+    const NP=this.plugin();
+    if(!NP){
+      console.log("[iap] (no-op) remove-ads purchase:",CONFIG.IAP_REMOVE_ADS_PRODUCT_ID);
+      UI.toast(tr("iap_web"));
+      return;
+    }
+    if(S.removeAds) return;
+    try{
+      await NP.purchaseProduct({ productIdentifier:CONFIG.IAP_REMOVE_ADS_PRODUCT_ID, productType:"inapp", quantity:1 });
+      this.grantRemoveAds();
+    }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
+  },
+  grantRemoveAds(){
+    if(S.removeAds) return;
+    S.removeAds=true; save();
+    Ads.applyRemoveAds();             // banner down, interstitials off…
+    // …rewarded continue/2×XP DELIBERATELY untouched (see Ads header)
+    Audio2.unlock(); Haptics.perfect();
+    UI.toast(tr("ads_removed_toast"),true);
+    if(!$("unlocks").classList.contains("hidden")) UI.renderUnlocks();
+  },
+
+  /* Play policy: non-consumables must be restorable (reinstall/new
+     device). Consumable coin packs are intentionally NOT restorable. */
+  async restore(){
+    const NP=this.plugin();
+    if(!NP){ console.log("[iap] (no-op) restore purchases"); UI.toast(tr("restore_web")); return; }
+    try{
+      const res=await NP.restorePurchases();
+      const owned=(res?.transactions||res?.purchases||[])
+        .map(t=>t?.productIdentifier||t?.productId).filter(Boolean);
+      if(owned.includes(CONFIG.IAP_REMOVE_ADS_PRODUCT_ID)){ this.grantRemoveAds(); }
+      else UI.toast(tr("no_restore"));
+    }catch(e){ console.warn("[iap] restore failed",e); }
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIFECYCLE — pause loop & kill audio when backgrounded (browser
+   visibility API + Capacitor App plugin when native).
+   ═══════════════════════════════════════════════════════════════════════ */
+function wireLifecycle(){
+  document.addEventListener("visibilitychange",()=>{
+    if(document.hidden){ Audio2.suspend(); UI.pause(); }
+  });
+  const App=window.Capacitor?.Plugins?.App;
+  if(App){
+    App.addListener("appStateChange",({isActive})=>{
+      if(!isActive){ Audio2.suspend(); UI.pause(); }
+    });
+    // Android hardware back: pause instead of killing the activity mid-run
+    App.addListener("backButton",()=>{
+      if(Game.state==="playing") UI.pause();
+      else if(Game.state==="paused"||Game.state==="over") UI.home();
+      else App.exitApp();
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BOOT
+   ═══════════════════════════════════════════════════════════════════════ */
+Particles.init();
+Game.init();
+Juice.init();
+Lang.init();
+UI.init();
+Missions.ensure();
+UI.renderMissions();
+Progress.checkDaily();
+wireLifecycle();
+Ads.init();
+Billing.init();
+console.log("[orbit-rush] ready — level",S.level,"best",S.best);
+</script>
+</body>
+</html>

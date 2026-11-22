@@ -1,0 +1,4 @@
+# Netlify publishes only the web build of the game.
+[build]
+  publish = "www"
+  command = ""

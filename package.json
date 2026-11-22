@@ -1,0 +1,23 @@
+{
+  "name": "orbit-rush",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orbit Rush — one-tap orbit arcade game (Capacitor Android app)",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "bundle": "cap sync android && cd android && ./gradlew bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "7.2.0",
+    "@capacitor-community/keep-awake": "7.1.0",
+    "@capacitor/android": "7.6.10",
+    "@capacitor/app": "7.1.2",
+    "@capacitor/core": "7.6.10",
+    "@capacitor/haptics": "7.0.5",
+    "@capgo/native-purchases": "7.19.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.6.10"
+  }
+}

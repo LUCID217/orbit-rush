@@ -61,4 +61,4 @@ The output is `android/app/build/outputs/bundle/release/app-release.aab`. Upload
 
 Pushing to `main` deploys this automatically on Netlify.
 
-Last deploy test: 2026-11-22.
+Last deploy test: 2026-11-22 (public repo).

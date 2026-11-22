@@ -56,3 +56,7 @@ The output is `android/app/build/outputs/bundle/release/app-release.aab`. Upload
 - Ads: answer "Yes, contains ads".
 - Privacy policy URL: required because the app shows ads.
 - Content rating questionnaire, target audience, and store listing: icon, feature graphic, screenshots.
+
+## Deploys
+
+Pushing to `main` deploys this automatically on Netlify.

@@ -39,7 +39,7 @@ The game ships in English, Spanish, Portuguese (Brazil), Indonesian and Filipino
    This replaces the test IDs in `www/index.html`, `capacitor.config.json` and `AndroidManifest.xml`, and turns off test mode.
 2. **In-app products:** in Play Console, go to Monetize → In-app products and create the 4 coin packs and Remove Ads. Then copy their product IDs into `CONFIG.IAP_COIN_PACKS` and `CONFIG.IAP_REMOVE_ADS_PRODUCT_ID`. The current IDs are placeholders.
 3. **App ID:** the package is `com.etsholdings.orbitrush`. Once you upload it to Play, it can never change, so change it first if you want something different. It's set in `capacitor.config.json` and in `android/app/build.gradle` as `namespace` and `applicationId`.
-4. **Icon:** the launcher icon is still the default Capacitor one. In Android Studio, use right-click `res` → New → Image Asset.
+4. **Icon:** the launcher icon, adaptive layers (with a monochrome layer for themed icons) and splash are the Orbit Rush art. They are made by `store-art/icon.js`.
 5. Bump `versionCode` in `android/app/build.gradle` on every upload.
 
 ## Build the release bundle
@@ -55,7 +55,8 @@ The output is `android/app/build/outputs/bundle/release/app-release.aab`. Upload
 - Data safety: declare the advertising ID, plus the device and app info that AdMob collects.
 - Ads: answer "Yes, contains ads".
 - Privacy policy URL: required because the app shows ads.
-- Content rating questionnaire, target audience, and store listing: icon, feature graphic, screenshots.
+- Content rating questionnaire and target audience.
+- Store listing art is in `fastlane/metadata/android/<locale>/images/`. It has the 512 icon, the 1024×500 feature graphic and 6 captioned phone screenshots for each language. Upload it in Play Console, or with `fastlane supply`. See `store-art/README.md` to regenerate it.
 
 ## Deploys
 

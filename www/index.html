@@ -164,6 +164,34 @@ button:disabled{opacity:.35; animation:none}
   width:46px;height:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;
   background:#ffffff33;font-size:18px;display:none;box-shadow:0 4px 0 #00000026}
 
+/* Optional email invite (web build only). A small sheet over the bottom of
+   the game-over screen, shown after a new best or a LEGENDARY run. It never
+   blocks the retry button and closes by itself when a new run starts. */
+#crew{position:absolute;left:50%;bottom:calc(var(--sab) + var(--banner-h) + 12px);z-index:12;
+  width:min(380px,calc(100vw - 24px));transform:translateX(-50%);
+  background:#1d0f5e;border:1px solid #ffffff33;border-radius:18px;padding:14px 14px 12px;
+  box-shadow:0 14px 40px #00000080;text-align:left;
+  touch-action:manipulation;user-select:text;-webkit-user-select:text;
+  animation:crewIn .38s cubic-bezier(.2,1.2,.4,1)}
+@keyframes crewIn{from{transform:translate(-50%,40px);opacity:0}}
+#crew h3{font-size:16px;font-weight:900;line-height:1.25;color:#ffe86b;padding-right:30px}
+#crew p{font-size:13px;color:var(--dim);margin:4px 0 10px;line-height:1.35}
+#crew form{display:flex;gap:8px}
+#crew input[type=email]{flex:1;min-width:0;height:46px;border-radius:12px;border:2px solid #ffffff40;
+  background:#ffffff1a;color:#fff;font:inherit;font-size:16px;padding:0 12px;outline:none}
+#crew input[type=email]:focus{border-color:#ffe86b}
+#crew input::placeholder{color:#ffffff80}
+#crew button.go{min-height:46px;padding:0 16px;font-size:15px;border-radius:12px;
+  background:linear-gradient(180deg,#ffe86b,#ffb01f);color:#5a2a00;box-shadow:0 4px 0 #c96a00;white-space:nowrap}
+#crew .x{position:absolute;top:6px;right:6px;width:40px;height:40px;min-width:40px;min-height:40px;padding:0;
+  background:transparent;font-size:20px;color:#ffffffb0;border-radius:50%}
+#crew .fine{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px;font-size:11px;color:#ffffffa0}
+#crew .fine a{color:#ffffffc0}
+#crew .skip{min-height:34px;min-width:0;white-space:nowrap;flex:0 0 auto;padding:4px 10px;font-size:13px;font-weight:700;background:#ffffff1f}
+#crew .msg{font-size:12px;color:#ffb3d9;margin-top:6px;min-height:0}
+#crew .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+#crew.done h3{padding-right:0}
+
 /* small util */
 .hidden{display:none !important}
 .dimtxt{color:var(--dim);font-size:12px;max-width:300px}
@@ -221,6 +249,20 @@ button:disabled{opacity:.35; animation:none}
     <div class="missions" id="o-missions" style="width:100%"></div>
   </div>
   <button class="ghostbtn" id="btn-home" style="min-height:40px;padding:8px 18px;font-size:14px" data-i18n="home">Home</button>
+</div>
+
+<!-- ── OPTIONAL EMAIL INVITE (web only, see Crew below) ────────────── -->
+<div id="crew" class="hidden" role="dialog" aria-labelledby="crew-h">
+  <button class="x" id="crew-x" type="button" aria-label="Close">✕</button>
+  <h3 id="crew-h"></h3>
+  <p id="crew-p"></p>
+  <form id="crew-form" novalidate>
+    <input type="email" id="crew-email" name="email" autocomplete="email" inputmode="email" enterkeyhint="send" required>
+    <input class="hp" type="text" id="crew-hp" name="bot-field" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button class="go" id="crew-go" type="submit"></button>
+  </form>
+  <div class="msg" id="crew-msg"></div>
+  <div class="fine"><span><span id="crew-fine"></span> <a id="crew-pv" href="https://ets-games.netlify.app/privacy/" target="_blank" rel="noopener"></a></span><button class="skip" id="crew-skip" type="button"></button></div>
 </div>
 
 <!-- ── PAUSE SCREEN ─────────────────────────────────────────────────── -->
@@ -379,6 +421,18 @@ const CONFIG = {
   UNLOCK_BASE: 350,
   UNLOCK_EXPONENT: 1.7,
 
+  /* ── OPTIONAL EMAIL INVITE (web build only; never in the Android app)
+        After a new best or a LEGENDARY run, a small skippable card asks
+        if the player wants a heads-up when the game hits Google Play.
+        Never during play, never required, gone for good after a signup
+        or after it has been closed twice. ──────────────────────────── */
+  CREW_ENABLED: true,           // master switch
+  CREW_SITE: "https://ets-games.netlify.app", // Netlify form "newsletter" + /api/hit counter live here
+  CREW_MIN_RUNS: 3,             // not before the player has played a few runs
+  CREW_EVERY_N_SESSIONS: 3,     // at most once every N visits
+  CREW_MAX_CLOSES: 2,           // closed this many times → never shown again
+  CREW_DELAY_MS: 1100,          // let the score and headline land first
+
   SAVE_KEY: "orbitRush.save.v1",
 };
 /* ═══════════════ END CONFIG — code below, knobs above ═══════════════ */
@@ -422,6 +476,7 @@ en:{
   m_score:"Score {n} in one run", m_perfectRow:"{n} PERFECTs in a row", m_rings:"Pass {n} rings (total)", m_runs:"Play {n} runs",
   m_level:"Reach level {n}", m_rebirth_once:"Rebirth once", m_rebirth_again:"Rebirth again",
   words:["","","GREAT!","AWESOME!","AMAZING!","INCREDIBLE!","UNSTOPPABLE!","LEGENDARY!"],
+  crew_title:"Get Orbit Rush on Google Play first", crew_text:"Plus early access to our next games. Only launch and game news, and you can unsubscribe any time.", crew_ph:"you@email.com", crew_go:"Count me in", crew_skip:"No thanks", crew_fine:"Optional. The game stays free either way.", privacy_link:"Privacy", crew_bad:"That email doesn't look right. Check it and try again.", crew_err:"Couldn't send. Check your connection and try again.", crew_done:"✔ You're on the crew list!", crew_done_text:"We'll email you when Orbit Rush lands on Google Play.",
 },
 es:{
   tagline:"toca para soltar · aterriza en el siguiente anillo", best:"RÉCORD", best_lower:"récord", streak:"RACHA", coins:"monedas", lvl:"NIV",
@@ -450,6 +505,7 @@ es:{
   m_score:"Haz {n} puntos en una partida", m_perfectRow:"{n} PERFECTOS seguidos", m_rings:"Pasa {n} anillos (en total)", m_runs:"Juega {n} partidas",
   m_level:"Llega al nivel {n}", m_rebirth_once:"Renace una vez", m_rebirth_again:"Renace otra vez",
   words:["","","¡GENIAL!","¡TREMENDO!","¡INCREÍBLE!","¡BRUTAL!","¡IMPARABLE!","¡LEGENDARIO!"],
+  crew_title:"Consigue Orbit Rush en Google Play antes que nadie", crew_text:"Y acceso anticipado a nuestros próximos juegos. Solo novedades de lanzamientos y juegos, y puedes darte de baja cuando quieras.", crew_ph:"tu@correo.com", crew_go:"¡Me apunto!", crew_skip:"No, gracias", crew_fine:"Opcional. El juego sigue siendo gratis igual.", privacy_link:"Privacidad", crew_bad:"Ese correo no parece correcto. Revísalo e inténtalo de nuevo.", crew_err:"No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.", crew_done:"✔ ¡Ya estás en la tripulación!", crew_done_text:"Te avisaremos por correo cuando Orbit Rush llegue a Google Play.",
 },
 "pt-BR":{
   tagline:"toque para soltar · caia no próximo anel", best:"RECORDE", best_lower:"recorde", streak:"SEQUÊNCIA", coins:"moedas", lvl:"NV",
@@ -478,6 +534,7 @@ es:{
   m_score:"Faça {n} pontos numa partida", m_perfectRow:"{n} PERFEITOS seguidos", m_rings:"Passe {n} anéis (no total)", m_runs:"Jogue {n} partidas",
   m_level:"Chegue ao nível {n}", m_rebirth_once:"Renasça uma vez", m_rebirth_again:"Renasça de novo",
   words:["","","ÓTIMO!","DEMAIS!","INCRÍVEL!","SENSACIONAL!","IMPARÁVEL!","LENDÁRIO!"],
+  crew_title:"Tenha Orbit Rush no Google Play antes de todo mundo", crew_text:"E acesso antecipado aos nossos próximos jogos. Só novidades de lançamentos e jogos, e você pode cancelar quando quiser.", crew_ph:"voce@email.com", crew_go:"Quero!", crew_skip:"Agora não", crew_fine:"Opcional. O jogo continua grátis de qualquer jeito.", privacy_link:"Privacidade", crew_bad:"Esse e-mail não parece certo. Confira e tente de novo.", crew_err:"Não deu para enviar. Confira sua conexão e tente de novo.", crew_done:"✔ Você está na tripulação!", crew_done_text:"Vamos te avisar por e-mail quando Orbit Rush chegar ao Google Play.",
 },
 id:{
   tagline:"ketuk untuk melepas · mendarat di cincin berikutnya", best:"TERBAIK", best_lower:"terbaik", streak:"BERUNTUN", coins:"koin", lvl:"LV",
@@ -506,6 +563,7 @@ id:{
   m_score:"Raih {n} poin dalam satu main", m_perfectRow:"{n} SEMPURNA beruntun", m_rings:"Lewati {n} cincin (total)", m_runs:"Main {n} kali",
   m_level:"Capai level {n}", m_rebirth_once:"Lahir ulang sekali", m_rebirth_again:"Lahir ulang lagi",
   words:["","","MANTAP!","KEREN!","LUAR BIASA!","GOKIL!","TAK TERBENDUNG!","LEGENDARIS!"],
+  crew_title:"Dapatkan Orbit Rush di Google Play lebih dulu", crew_text:"Plus akses awal ke game kami berikutnya. Hanya kabar rilis dan game, dan kamu bisa berhenti berlangganan kapan saja.", crew_ph:"kamu@email.com", crew_go:"Ikut dong", crew_skip:"Nggak dulu", crew_fine:"Opsional. Game-nya tetap gratis.", privacy_link:"Privasi", crew_bad:"Email itu sepertinya salah. Cek lagi lalu coba lagi.", crew_err:"Gagal mengirim. Cek koneksimu lalu coba lagi.", crew_done:"✔ Kamu sudah masuk daftar kru!", crew_done_text:"Kami akan kirim email saat Orbit Rush rilis di Google Play.",
 },
 fil:{
   tagline:"i-tap para bitawan · lumapag sa susunod na singsing", best:"RECORD", best_lower:"record", streak:"SUNOD-SUNOD", coins:"barya", lvl:"LVL",
@@ -534,6 +592,7 @@ fil:{
   m_score:"Makakuha ng {n} puntos sa isang laro", m_perfectRow:"{n} PERPEKTO nang sunod-sunod", m_rings:"Lampasan ang {n} singsing (kabuuan)", m_runs:"Maglaro nang {n} beses",
   m_level:"Umabot sa level {n}", m_rebirth_once:"Isilang muli nang isang beses", m_rebirth_again:"Isilang muli ulit",
   words:["","","GALING!","ASTIG!","ANG LUPET!","GRABE!","DI MAPIGILAN!","ALAMAT!"],
+  crew_title:"Makuha muna ang Orbit Rush sa Google Play", crew_text:"Kasama ang maagang access sa mga susunod naming laro. Balita lang tungkol sa launch at mga laro, at puwede kang mag-unsubscribe kahit kailan.", crew_ph:"ikaw@email.com", crew_go:"Sali ako!", crew_skip:"Hindi muna", crew_fine:"Opsyonal. Libre pa rin ang laro kahit ano ang piliin mo.", privacy_link:"Privacy", crew_bad:"Mukhang mali ang email na iyan. Pakicheck at subukan ulit.", crew_err:"Hindi naipadala. Pakicheck ang connection mo at subukan ulit.", crew_done:"✔ Kasama ka na sa crew list!", crew_done_text:"Ie-email ka namin kapag nasa Google Play na ang Orbit Rush.",
 },
 };
 /* language selection: ?lang= link (from the ETS site) > player's choice in
@@ -610,6 +669,7 @@ const DEFAULT_SAVE={
   muted:false, lowFX:false, musicOn:true,
   lang:"",                     // "" = follow ?lang= link / ETS site / device
   consentDone:false,
+  crew:{sess:0,last:-99,closes:0,done:false}, // email invite: visits, visit last shown, times closed, joined
 };
 const SHOP_CATS=["trail","skin","bg","sound","fx"];
 let S=loadSave();
@@ -621,7 +681,7 @@ function loadSave(){
     const s=Object.assign(structuredClone(DEFAULT_SAVE), JSON.parse(raw));
     // nested objects need their own merge (a shallow assign would drop
     // newly added categories like sound/fx from pre-shop saves)
-    for(const k of ["owned","equip","shopSeen"])
+    for(const k of ["owned","equip","shopSeen","crew"])
       s[k]=Object.assign(structuredClone(DEFAULT_SAVE[k]), s[k]||{});
     // never leave an un-owned item equipped
     for(const c of SHOP_CATS) if(!s.owned[c].includes(s.equip[c])) s.equip[c]=0;
@@ -1248,6 +1308,7 @@ const Game={
   word:{txt:"",age:9,color:"#fff",size:44},   // big centre praise word
   waves:[],                                   // pooled shockwave rings
   beatBestThisRun:false,
+  peakCombo:1,                          // highest combo this run (COMBO_MAX = LEGENDARY)
   stars:null,
   floats:[],                            // pooled floating texts
 
@@ -1263,6 +1324,7 @@ const Game={
     // (touch-action:none in CSS suppresses browser gestures).
     this.canvas.addEventListener("pointerdown",e=>{e.preventDefault();this.onTap();},{passive:false});
     window.addEventListener("keydown",e=>{
+      if(e.target&&e.target.closest&&e.target.closest("#crew")) return; // typing an email, not playing
       if(e.code==="Space"){e.preventDefault();
         if(this.state==="over"&&performance.now()-(UI.overShownAt||0)>450){ Ads.reviveDeclined(); this.startRun(); }
         else this.onTap();}
@@ -1332,7 +1394,7 @@ const Game={
 
   startRun(){
     this.state="playing";
-    this.score=0; this.combo=1; this.perfectRow=0; this.revived=false;
+    this.score=0; this.combo=1; this.peakCombo=1; this.perfectRow=0; this.revived=false;
     this.beatBestThisRun=false; this.word.age=9;
     this.rings=0; this.savesLeft=CONFIG.FREE_SAVES_PER_RUN;
     Missions.snapshot();
@@ -1383,6 +1445,7 @@ const Game={
     let points;
     if(perfect){
       this.combo=Math.min(this.combo+1,CONFIG.COMBO_MAX);
+      this.peakCombo=Math.max(this.peakCombo,this.combo);
       this.perfectRow++; this.runPerfects++;
       points=this.combo;
       Audio2.perfect(this.combo); Haptics.perfect();
@@ -2081,6 +2144,7 @@ const UI={
   /* fill every [data-i18n] element, then redraw the dynamic text */
   applyLang(){
     document.querySelectorAll("[data-i18n]").forEach(el=>{ el.textContent=tr(el.dataset.i18n); });
+    Crew.text();
     this.refreshHome();
     if(!$("unlocks").classList.contains("hidden")) this.renderUnlocks();
   },
@@ -2088,6 +2152,7 @@ const UI={
   showScreen(name){ // null = none (in game)
     for(const id of ["start","over","pause","unlocks"])
       $(id).classList.toggle("hidden",id!==name);
+    if(name!=="over") Crew.close(false);   // a new run / home quietly closes the email card
     if(name!==null) $("btn-pause").style.display="none";
   },
   home(){
@@ -2144,7 +2209,7 @@ const UI={
     Game.state="over";
     Awake.off();
     const score=Game.score;
-    const wasBest=score>S.best;
+    const wasBest=score>S.best, prevBest=S.best;
     // near-miss feedback: the "one more run" hook
     const m=Game.missMargin;
     $("o-miss").textContent = m!==null ? tr("missed_by",{n:Math.max(1,Math.round(m))}) : "";
@@ -2190,6 +2255,7 @@ const UI={
     this.overShownAt=performance.now();
     Music.play("game");        // keep the energy up — next run is one tap away
     Ads.onGameOver();       // marks interstitial pending; fires only after revive is resolved
+    Crew.maybeOffer(wasBest&&prevBest>=5, Game.peakCombo>=CONFIG.COMBO_MAX);
   },
 
   /* re-sync the game-over screen's level/XP bar (after rewarded 2× XP) */
@@ -2624,6 +2690,117 @@ const Billing={
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
+   CREW — optional email invite, browser version only.
+   Fair by design: never during play, never required, never blocks
+   "play again", gone for good after a signup or after two closes.
+   Signups go to the ETS site's Netlify form "newsletter"; the shown /
+   joined / closed totals go to the site's counter (/stats/). Nothing else
+   about the player is sent.
+   ═══════════════════════════════════════════════════════════════════════ */
+const Crew={
+  open:false, shownThisVisit:false, timer:0, country:"",
+  ref:(()=>{ try{ return (new URLSearchParams(location.search).get("ref")||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,24); }catch(e){ return ""; } })(),
+  /* web only: the Android app (Capacitor) never shows it */
+  available(){
+    return CONFIG.CREW_ENABLED && !window.Capacitor?.isNativePlatform?.() && /^https?:$/.test(location.protocol);
+  },
+  init(){
+    if(!this.available()) return;
+    S.crew.sess++; save();                        // one visit = one page load
+    $("crew-form").addEventListener("submit",e=>{ e.preventDefault(); this.submit(); });
+    $("crew-skip").addEventListener("click",()=>{ Audio2.ui(); this.close(true); });
+    $("crew-x").addEventListener("click",()=>{ Audio2.ui(); this.close(true); });
+    this.text();
+  },
+  text(){
+    $("crew-h").textContent=tr("crew_title");
+    $("crew-p").textContent=tr("crew_text");
+    $("crew-email").placeholder=tr("crew_ph");
+    $("crew-email").setAttribute("aria-label",tr("crew_ph"));
+    $("crew-go").textContent=tr("crew_go");
+    $("crew-skip").textContent=tr("crew_skip");
+    $("crew-fine").textContent=tr("crew_fine");
+    $("crew-pv").textContent=tr("privacy_link");
+    $("crew-x").setAttribute("aria-label",tr("crew_skip"));
+  },
+  eligible(){
+    const c=S.crew;
+    return this.available() && !c.done && c.closes<CONFIG.CREW_MAX_CLOSES && !this.shownThisVisit
+      && S.runsPlayed>=CONFIG.CREW_MIN_RUNS && c.sess-c.last>=CONFIG.CREW_EVERY_N_SESSIONS;
+  },
+  maybeOffer(newBest,legendary){
+    if(!(newBest||legendary) || !this.eligible()) return;
+    clearTimeout(this.timer);
+    const shownAt=UI.overShownAt;
+    this.timer=setTimeout(()=>{
+      // the player may already have tapped "play again" — then skip it, no harm done
+      if(Game.state!=="over"||UI.overShownAt!==shownAt) return;
+      this.show();
+    },CONFIG.CREW_DELAY_MS);
+  },
+  show(){
+    this.open=true; this.shownThisVisit=true;
+    S.crew.last=S.crew.sess; save();
+    const el=$("crew"); el.classList.remove("done","hidden");
+    $("crew-form").classList.remove("hidden"); $("crew-skip").classList.remove("hidden");
+    $("crew-msg").textContent=""; $("crew-email").value=""; $("crew-go").disabled=false;
+    this.text();
+    this.hit("ask");
+    this.lookupCountry();
+  },
+  /* closed with ✕ / "No thanks" (counted), or quietly by a new run / Home
+     (also counted once: either way the player chose not to join) */
+  close(byButton){
+    clearTimeout(this.timer);
+    if(!this.open) return;
+    this.open=false;
+    $("crew").classList.add("hidden");
+    if(S.crew.done) return;
+    S.crew.closes++; save();
+    this.hit("skip");
+  },
+  submit(){
+    const email=$("crew-email").value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)||email.length>200){
+      $("crew-msg").textContent=tr("crew_bad"); $("crew-email").focus(); return;
+    }
+    if($("crew-hp").value) { this.thanks(); return; }        // bots fill the hidden field
+    $("crew-go").disabled=true; $("crew-msg").textContent="";
+    const body=new URLSearchParams({"form-name":"newsletter","bot-field":"",email,
+      source:"game",game:"orbit-rush",lang:Lang.cur,country:this.country,ref:this.ref||"direct"});
+    // Netlify Forms accepts a plain form POST from the game's own domain;
+    // "no-cors" means we can't read the reply, so only a network failure counts as an error
+    fetch(CONFIG.CREW_SITE+"/",{method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()})
+      .then(()=>{ S.crew.done=true; save(); this.hit("join"); this.thanks(); })
+      .catch(()=>{ $("crew-go").disabled=false; $("crew-msg").textContent=tr("crew_err"); });
+  },
+  thanks(){
+    S.crew.done=true; save();
+    $("crew").classList.add("done");
+    $("crew-form").classList.add("hidden"); $("crew-skip").classList.add("hidden");
+    $("crew-h").textContent=tr("crew_done");
+    $("crew-p").textContent=tr("crew_done_text");
+    $("crew-email").blur();
+    Audio2.unlock(); Haptics.perfect?.();
+    setTimeout(()=>{ if(this.open){ this.open=false; $("crew").classList.add("hidden"); } },2600);
+  },
+  lookupCountry(){
+    if(this.country) return;
+    try{
+      fetch(CONFIG.CREW_SITE+"/api/geo",{cache:"no-store"}).then(r=>r.ok?r.json():{}).then(j=>{
+        if(j&&/^[A-Z]{2}$/.test(j.country||"")) this.country=j.country; }).catch(()=>{});
+    }catch(e){}
+  },
+  /* totals only (no ID, no email): ask / join / skip, by language, country, source */
+  hit(e){
+    const data=JSON.stringify({e,ref:this.ref||"direct",lang:Lang.cur,game:"orbit-rush"});
+    try{ if(navigator.sendBeacon&&navigator.sendBeacon(CONFIG.CREW_SITE+"/api/hit",data)) return; }catch(err){}
+    try{ fetch(CONFIG.CREW_SITE+"/api/hit",{method:"POST",mode:"no-cors",body:data,keepalive:true}).catch(()=>{}); }catch(err){}
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
    LIFECYCLE — pause loop & kill audio when backgrounded (browser
    visibility API + Capacitor App plugin when native).
    ═══════════════════════════════════════════════════════════════════════ */
@@ -2653,6 +2830,7 @@ Game.init();
 Juice.init();
 Lang.init();
 UI.init();
+Crew.init();
 Missions.ensure();
 UI.renderMissions();
 Progress.checkDaily();

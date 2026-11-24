@@ -62,3 +62,7 @@ The output is `android/app/build/outputs/bundle/release/app-release.aab`. Upload
 Pushing to `main` deploys this automatically on Netlify.
 
 Last deploy test: 2026-11-22 (public repo).
+
+## Optional email invite (web only)
+
+After a new best or a LEGENDARY run, the browser version can show a small, skippable card: "Get Orbit Rush on Google Play first". It never appears during play or in the Android app. It waits a second so the score lands first, and it never covers "Tap to play again". It shows at most once every 3 visits, and never again after a signup or after it has been closed twice. Signups go to the ETS site's Netlify form `newsletter`. The shown, joined and closed totals appear on the site's `/stats/` page. To change it, see `CREW_*` in the CONFIG block and `Crew` in `www/index.html`. `CREW_ENABLED: false` turns it off.

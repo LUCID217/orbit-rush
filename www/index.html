@@ -2488,7 +2488,10 @@ const Ads={
           margin: 0,
           isTesting: CONFIG.ADS_TESTING_MODE,
         });
-        this.prepInterstitial();
+        // the boot purchase check (Billing.reconcile) runs in parallel and
+        // may have restored Remove Ads while the banner was loading
+        if(S.removeAds) this.applyRemoveAds();
+        else this.prepInterstitial();
       }
       this.prepRewarded();   // ALWAYS — rewarded is exempt from Remove-Ads
       console.log("[ads] initialized");
@@ -2628,6 +2631,22 @@ const Billing={
       });
       console.log("[iap] initialized");
     }catch(e){ console.warn("[iap] product query failed (continuing)",e); }
+    // reinstall / new device: get the ad-free state back with no tap.
+    // Silent: no toast, no error shown, whatever happens.
+    try{ await this.reconcile(true); }
+    catch(e){ console.warn("[iap] boot purchase check failed (silent)",e); }
+  },
+
+  /* Read what Play says this account owns. restorePurchases() resolves to
+     nothing in 7.19.3, so ownership always comes from getPurchases().
+     Returns {removeAds} = whether a completed Remove Ads purchase exists. */
+  async reconcile(silent){
+    const NP=this.plugin(); if(!NP) return {removeAds:false};
+    const res=await NP.getPurchases({ productType:"inapp" });
+    const list=Array.isArray(res?.purchases)?res.purchases:[];
+    const removeAds=list.some(t=>t?.productIdentifier===CONFIG.IAP_REMOVE_ADS_PRODUCT_ID && t?.purchaseState==="1");
+    if(removeAds) this.grantRemoveAds(silent);
+    return {removeAds};
   },
 
   async buyCoinPack(idx){
@@ -2668,13 +2687,15 @@ const Billing={
       this.grantRemoveAds();
     }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
   },
-  grantRemoveAds(){
+  grantRemoveAds(silent=false){
     if(S.removeAds) return;
     S.removeAds=true; save();
     Ads.applyRemoveAds();             // banner down, interstitials off…
     // …rewarded continue/2×XP DELIBERATELY untouched (see Ads header)
-    Audio2.unlock(); Haptics.perfect();
-    UI.toast(tr("ads_removed_toast"),true);
+    if(!silent){
+      Audio2.unlock(); Haptics.perfect();
+      UI.toast(tr("ads_removed_toast"),true);
+    }
     if(!$("unlocks").classList.contains("hidden")) UI.renderUnlocks();
   },
 
@@ -2684,11 +2705,14 @@ const Billing={
     const NP=this.plugin();
     if(!NP){ console.log("[iap] (no-op) restore purchases"); UI.toast(tr("restore_web")); return; }
     try{
-      const res=await NP.restorePurchases();
-      const owned=(res?.transactions||res?.purchases||[])
-        .map(t=>t?.productIdentifier||t?.productId).filter(Boolean);
-      if(owned.includes(CONFIG.IAP_REMOVE_ADS_PRODUCT_ID)){ this.grantRemoveAds(); }
-      else UI.toast(tr("no_restore"));
+      // resolves to nothing; it only makes Play finish/acknowledge
+      // anything outstanding. Ownership is read by reconcile().
+      try{ await NP.restorePurchases(); }
+      catch(e){ console.warn("[iap] restorePurchases failed (continuing)",e); }
+      const had=S.removeAds;
+      const {removeAds}=await this.reconcile(false);
+      if(!removeAds) UI.toast(tr("no_restore"));
+      else if(had) UI.toast(tr("ads_removed_toast"),true); // already applied: still confirm
     }catch(e){ console.warn("[iap] restore failed",e); }
   },
 };

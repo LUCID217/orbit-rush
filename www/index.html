@@ -409,6 +409,7 @@ const CONFIG = {
     { productId:"orbit_rush_coins_mega",  coins:12000, label:"Mega"   }, // TODO: replace with real product ID before release
   ],
   IAP_REMOVE_ADS_PRODUCT_ID: "orbit_rush_remove_ads", // non-consumable  // TODO: replace with real product ID before release
+  IAP_GRANTED_MAX: 200,         // purchase tokens remembered in the save (S.iapGranted) so a coin pack is never paid twice
 
   /* ── PERFORMANCE / FX ─────────────────────────────────────────────── */
   DPR_CAP: 2,                   // cap devicePixelRatio for cheap GPUs
@@ -463,6 +464,7 @@ en:{
   coin_revive:"🪙 −{n} — RUN CONTINUES!", run_continues:"🎁 RUN CONTINUES!", bonus_xp:"🎁 +{n} bonus XP!",
   privacy_web:"Ad privacy options appear here in the Android build", iap_web:"Purchases work in the Android build",
   restore_web:"Restore works in the Android build", no_restore:"No purchases to restore", coins_added:"🪙 +{n} coins!",
+  iap_pending:"⏳ Payment pending — it's added next time you open the game after it clears",
   ads_removed_toast:"✔ Ads removed — thank you!", locked:"⭐ Unlocks at {cost} lifetime XP — you have {xp}. Coins buy it once unlocked.",
   need_more:"Need 🪙{n} more for {name}", tap_buy:"{name} — 🪙{n}. Tap again to buy", equipped:"✦ {name} — equipped!",
   tap_buy_cell:"tap = buy!", new_badge:"NEW", pack_small:"Small", pack_medium:"Medium", pack_large:"Large", pack_mega:"Mega",
@@ -492,6 +494,7 @@ es:{
   coin_revive:"🪙 −{n} — ¡LA PARTIDA SIGUE!", run_continues:"🎁 ¡LA PARTIDA SIGUE!", bonus_xp:"🎁 ¡+{n} XP de bonus!",
   privacy_web:"Las opciones de privacidad de anuncios están en la versión de Android", iap_web:"Las compras funcionan en la versión de Android",
   restore_web:"Restaurar funciona en la versión de Android", no_restore:"No hay compras para restaurar", coins_added:"🪙 ¡+{n} monedas!",
+  iap_pending:"⏳ Pago pendiente — se agregará al abrir el juego cuando se confirme",
   ads_removed_toast:"✔ Anuncios quitados — ¡gracias!", locked:"⭐ Se desbloquea con {cost} XP total — tienes {xp}. Luego se compra con monedas.",
   need_more:"Te faltan 🪙{n} para {name}", tap_buy:"{name} — 🪙{n}. Toca otra vez para comprar", equipped:"✦ ¡{name} equipado!",
   tap_buy_cell:"¡toca y compra!", new_badge:"NUEVO", pack_small:"Pequeño", pack_medium:"Mediano", pack_large:"Grande", pack_mega:"Mega",
@@ -521,6 +524,7 @@ es:{
   coin_revive:"🪙 −{n} — A PARTIDA CONTINUA!", run_continues:"🎁 A PARTIDA CONTINUA!", bonus_xp:"🎁 +{n} XP de bônus!",
   privacy_web:"As opções de privacidade de anúncios ficam na versão Android", iap_web:"Compras funcionam na versão Android",
   restore_web:"Restaurar funciona na versão Android", no_restore:"Nenhuma compra para restaurar", coins_added:"🪙 +{n} moedas!",
+  iap_pending:"⏳ Pagamento pendente — entra quando você abrir o jogo depois da confirmação",
   ads_removed_toast:"✔ Anúncios removidos — valeu!", locked:"⭐ Libera com {cost} de XP total — você tem {xp}. Depois é só comprar com moedas.",
   need_more:"Faltam 🪙{n} para {name}", tap_buy:"{name} — 🪙{n}. Toque de novo para comprar", equipped:"✦ {name} — equipado!",
   tap_buy_cell:"toque = comprar!", new_badge:"NOVO", pack_small:"Pequeno", pack_medium:"Médio", pack_large:"Grande", pack_mega:"Mega",
@@ -550,6 +554,7 @@ id:{
   coin_revive:"🪙 −{n} — PERMAINAN LANJUT!", run_continues:"🎁 PERMAINAN LANJUT!", bonus_xp:"🎁 Bonus +{n} XP!",
   privacy_web:"Opsi privasi iklan ada di versi Android", iap_web:"Pembelian berfungsi di versi Android",
   restore_web:"Pemulihan berfungsi di versi Android", no_restore:"Tidak ada pembelian untuk dipulihkan", coins_added:"🪙 +{n} koin!",
+  iap_pending:"⏳ Pembayaran tertunda — masuk saat kamu buka game lagi setelah dikonfirmasi",
   ads_removed_toast:"✔ Iklan dihapus — terima kasih!", locked:"⭐ Terbuka di {cost} total XP — kamu punya {xp}. Setelah itu beli dengan koin.",
   need_more:"Kurang 🪙{n} untuk {name}", tap_buy:"{name} — 🪙{n}. Ketuk lagi untuk beli", equipped:"✦ {name} — dipakai!",
   tap_buy_cell:"ketuk = beli!", new_badge:"BARU", pack_small:"Kecil", pack_medium:"Sedang", pack_large:"Besar", pack_mega:"Mega",
@@ -579,6 +584,7 @@ fil:{
   coin_revive:"🪙 −{n} — TULOY ANG LARO!", run_continues:"🎁 TULOY ANG LARO!", bonus_xp:"🎁 +{n} bonus XP!",
   privacy_web:"Nasa Android na bersyon ang mga opsyon sa privacy ng ad", iap_web:"Gumagana ang pagbili sa Android na bersyon",
   restore_web:"Gumagana ang pag-restore sa Android na bersyon", no_restore:"Walang mare-restore na binili", coins_added:"🪙 +{n} barya!",
+  iap_pending:"⏳ Nakabinbin ang bayad — idadagdag pagbukas mo ulit ng laro kapag nakumpirma na",
   ads_removed_toast:"✔ Wala nang ad — salamat!", locked:"⭐ Mabubuksan sa {cost} kabuuang XP — may {xp} ka. Bilhin gamit ang barya pagkatapos.",
   need_more:"Kulang ka ng 🪙{n} para sa {name}", tap_buy:"{name} — 🪙{n}. I-tap ulit para bilhin", equipped:"✦ {name} — gamit na!",
   tap_buy_cell:"tap = bili!", new_badge:"BAGO", pack_small:"Maliit", pack_medium:"Katamtaman", pack_large:"Malaki", pack_mega:"Mega",
@@ -662,6 +668,7 @@ const DEFAULT_SAVE={
   missionSeed:1,               // monotonically increasing mission generator seed
   coins:0,                     // spendable currency (earned per run)
   removeAds:false,             // non-consumable IAP: banner+interstitial off
+  iapGranted:[],               // purchase tokens already paid out (coin packs), newest last
   /* item 0 of every category is free & pre-owned */
   owned:{trail:[0],skin:[0],bg:[0],sound:[0],fx:[0]},
   equip:{trail:0,skin:0,bg:0,sound:0,fx:0},
@@ -683,6 +690,7 @@ function loadSave(){
     // newly added categories like sound/fx from pre-shop saves)
     for(const k of ["owned","equip","shopSeen","crew"])
       s[k]=Object.assign(structuredClone(DEFAULT_SAVE[k]), s[k]||{});
+    if(!Array.isArray(s.iapGranted)) s.iapGranted=[];
     // never leave an un-owned item equipped
     for(const c of SHOP_CATS) if(!s.owned[c].includes(s.equip[c])) s.equip[c]=0;
     return s;
@@ -2644,9 +2652,41 @@ const Billing={
     const NP=this.plugin(); if(!NP) return {removeAds:false};
     const res=await NP.getPurchases({ productType:"inapp" });
     const list=Array.isArray(res?.purchases)?res.purchases:[];
-    const removeAds=list.some(t=>t?.productIdentifier===CONFIG.IAP_REMOVE_ADS_PRODUCT_ID && t?.purchaseState==="1");
+    const removeAds=list.some(t=>t?.productIdentifier===CONFIG.IAP_REMOVE_ADS_PRODUCT_ID && this.completed(t));
     if(removeAds) this.grantRemoveAds(silent);
-    return {removeAds};
+    // Coin packs still on the account were paid but never consumed: the
+    // app died mid-flow, a pending (cash) payment cleared later, or the
+    // plugin's consume failed. Pay each token once, then consume it so
+    // the pack can be bought again. Pending ones wait for a later boot.
+    let granted=0;
+    for(const t of list){
+      if(!this.packFor(t) || !this.completed(t)) continue;
+      if(this.grantPack(t,silent)) granted++;
+      if(t.purchaseToken){
+        try{ await NP.consumePurchase({ purchaseToken:t.purchaseToken }); }
+        catch(e){ console.warn("[iap] consume failed (retried next launch)",e); }
+      }
+    }
+    return {removeAds, granted};
+  },
+
+  /* Grant only completed purchases: Android purchaseState "1" = PURCHASED
+     (7.19.3 Transaction docs). Pending ones never resolve purchaseProduct
+     (it rejects "Purchase is pending") and are picked up by reconcile(). */
+  completed(t){ return t?.purchaseState==="1"; },
+  isPendingError(e){ return /pending/i.test(String(e?.message||e?.errorMessage||e||"")); },
+  tokenOf(t){ return t?.purchaseToken||t?.orderId||t?.transactionId||""; },
+  packFor(t){ return CONFIG.IAP_COIN_PACKS.find(p=>p.productId===t?.productIdentifier)||null; },
+  /* pay a completed coin-pack purchase exactly once per token */
+  grantPack(t,silent){
+    const pack=this.packFor(t), key=this.tokenOf(t);
+    if(!pack || !this.completed(t)) return false;
+    if(!key){ console.warn("[iap] purchase has no token; not granted",t); return false; }
+    if(S.iapGranted.includes(key)) return false;
+    S.iapGranted.push(key);
+    if(S.iapGranted.length>CONFIG.IAP_GRANTED_MAX) S.iapGranted.splice(0,S.iapGranted.length-CONFIG.IAP_GRANTED_MAX);
+    this.grantCoins(pack.coins,silent);
+    return true;
   },
 
   async buyCoinPack(idx){
@@ -2661,14 +2701,20 @@ const Billing={
       // resolves only on a completed purchase; throws on cancel/failure.
       // isConsumable:true → the plugin consumes the token so the pack can
       // be bought again (the 7.19.3 default is false = owned forever).
-      await NP.purchaseProduct({ productIdentifier:pack.productId, productType:"inapp", quantity:1, isConsumable:true });
-      this.grantCoins(pack.coins);
-    }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
+      const t=await NP.purchaseProduct({ productIdentifier:pack.productId, productType:"inapp", quantity:1, isConsumable:true });
+      if(!this.completed(t)){ UI.toast(tr("iap_pending")); return; }
+      if(!this.grantPack(t,false)) console.warn("[iap] purchase already granted, not paid again",t);
+    }catch(e){
+      if(this.isPendingError(e)) UI.toast(tr("iap_pending"));
+      else console.warn("[iap] purchase failed/cancelled",e);
+    }
   },
-  grantCoins(n){
+  grantCoins(n,silent=false){
     S.coins+=n; save();               // same persistence the shop spends
-    Audio2.unlock(); Haptics.perfect();
-    UI.toast(tr("coins_added",{n}),true);
+    if(!silent){
+      Audio2.unlock(); Haptics.perfect();
+      UI.toast(tr("coins_added",{n}),true);
+    }
     UI.refreshHome();
     if(!$("unlocks").classList.contains("hidden")) UI.renderUnlocks();
   },
@@ -2683,9 +2729,13 @@ const Billing={
     if(S.removeAds) return;
     try{
       // non-consumable: never consumed, so it stays owned and restorable
-      await NP.purchaseProduct({ productIdentifier:CONFIG.IAP_REMOVE_ADS_PRODUCT_ID, productType:"inapp", quantity:1, isConsumable:false });
+      const t=await NP.purchaseProduct({ productIdentifier:CONFIG.IAP_REMOVE_ADS_PRODUCT_ID, productType:"inapp", quantity:1, isConsumable:false });
+      if(!this.completed(t)){ UI.toast(tr("iap_pending")); return; }
       this.grantRemoveAds();
-    }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
+    }catch(e){
+      if(this.isPendingError(e)) UI.toast(tr("iap_pending"));
+      else console.warn("[iap] purchase failed/cancelled",e);
+    }
   },
   grantRemoveAds(silent=false){
     if(S.removeAds) return;
@@ -2710,8 +2760,8 @@ const Billing={
       try{ await NP.restorePurchases(); }
       catch(e){ console.warn("[iap] restorePurchases failed (continuing)",e); }
       const had=S.removeAds;
-      const {removeAds}=await this.reconcile(false);
-      if(!removeAds) UI.toast(tr("no_restore"));
+      const {removeAds,granted}=await this.reconcile(false);
+      if(!removeAds && !granted) UI.toast(tr("no_restore"));
       else if(had) UI.toast(tr("ads_removed_toast"),true); // already applied: still confirm
     }catch(e){ console.warn("[iap] restore failed",e); }
   },

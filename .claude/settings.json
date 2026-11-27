@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/tools/hook_check.sh\"", "timeout": 300 } ] }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env)", "Read(**/.env.*)", "Read(**/secrets/**)", "Read(**/credentials*)",
+      "Read(**/*.jks)", "Read(**/*.keystore)", "Read(**/keystore.properties)", "Read(**/*.p12)",
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)",
+      "Bash(git push origin main:*)", "Bash(git push origin master:*)",
+      "Bash(git reset --hard:*)", "Bash(git clean:*)",
+      "Bash(node scripts/set-ad-ids.js:*)"
+    ],
+    "ask": [ "Bash(git push:*)", "Bash(npm publish:*)", "Bash(npm install:*)", "Bash(*gradlew*:*)" ]
+  }
+}

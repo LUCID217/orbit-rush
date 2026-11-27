@@ -312,6 +312,8 @@ const CONFIG = {
   ADS_TESTING_MODE: true,       // requests test ads; set false for release
   ADS_INTERSTITIAL_EVERY_N_DEATHS: 3, // ⚖ revenue-vs-retention knob #1
   ADS_INTERSTITIAL_MIN_INTERVAL_S: 60,// never two interstitials within 60s
+  ADS_RETRY_BASE_S: 5,          // failed interstitial/rewarded load → retry after this…
+  ADS_RETRY_MAX_S: 120,         // …doubling each failure up to this cap; reset on a successful load
   REWARDED_DOUBLE_XP_MULT: 2,   // ⚖ revenue-vs-retention knob #2
 
   /* ── XP / LEVELS (endless: cost = BASE_XP · level^EXPONENT) ───────── */
@@ -2450,6 +2452,7 @@ const Ads={
   interstitialLoaded:false, rewardedLoaded:false,
   lastInterstitialAt:0, pendingReward:null, doubleXPUsed:false,
   interstitialPending:false,   // cadence-eligible, waiting on the revive decision
+  retry:{ interstitial:{delay:0,timer:0}, rewarded:{delay:0,timer:0} }, // load-failure backoff
 
   plugin(){ return (CONFIG.ADS_ENABLED && window.Capacitor?.isNativePlatform?.() && window.Capacitor?.Plugins?.AdMob) || null; },
 
@@ -2477,9 +2480,11 @@ const Ads={
         document.documentElement.style.setProperty("--banner-h",h+"px");
         Game.resize();
       });
-      AdMob.addListener("interstitialAdLoaded",()=>{ this.interstitialLoaded=true; });
+      AdMob.addListener("interstitialAdLoaded",()=>{ this.interstitialLoaded=true; this.retryReset("interstitial"); });
+      AdMob.addListener("interstitialAdFailedToLoad",(err)=>{ this.interstitialLoaded=false; this.retryLater("interstitial",err); });
       AdMob.addListener("interstitialAdDismissed",()=>{ this.interstitialLoaded=false; this.prepInterstitial(); });
-      AdMob.addListener("onRewardedVideoAdLoaded",()=>{ this.rewardedLoaded=true; });
+      AdMob.addListener("onRewardedVideoAdLoaded",()=>{ this.rewardedLoaded=true; this.retryReset("rewarded"); });
+      AdMob.addListener("onRewardedVideoAdFailedToLoad",(err)=>{ this.rewardedLoaded=false; this.retryLater("rewarded",err); });
       AdMob.addListener("onRewardedVideoAdReward",()=>{ this.grantPendingReward(); });
       AdMob.addListener("onRewardedVideoAdDismissed",()=>{ this.rewardedLoaded=false; this.pendingReward=null; this.prepRewarded(); });
 
@@ -2508,13 +2513,33 @@ const Ads={
 
   async prepInterstitial(){
     const AdMob=this.plugin(); if(!AdMob) return;
+    if(S.removeAds) return;           // no interstitials to load
     try{ await AdMob.prepareInterstitial({ adId: CONFIG.INTERSTITIAL_AD_UNIT_ID, isTesting: CONFIG.ADS_TESTING_MODE }); }
-    catch(e){ console.warn("[ads] interstitial prepare failed",e); }
+    catch(e){ console.warn("[ads] interstitial prepare failed",e); this.retryLater("interstitial",e); }
   },
   async prepRewarded(){
     const AdMob=this.plugin(); if(!AdMob) return;
     try{ await AdMob.prepareRewardVideoAd({ adId: CONFIG.REWARDED_AD_UNIT_ID, isTesting: CONFIG.ADS_TESTING_MODE }); }
-    catch(e){ console.warn("[ads] rewarded prepare failed",e); }
+    catch(e){ console.warn("[ads] rewarded prepare failed",e); this.retryLater("rewarded",e); }
+  },
+  /* A failed load (offline at launch is common on prepaid data) retries
+     with backoff: ADS_RETRY_BASE_S, doubling to ADS_RETRY_MAX_S. The
+     FailedToLoad event and the prepare() rejection can both report the
+     same failure, so only one retry is ever scheduled at a time. */
+  retryLater(kind,err){
+    const r=this.retry[kind];
+    if(r.timer) return;
+    r.delay=r.delay?Math.min(r.delay*2,CONFIG.ADS_RETRY_MAX_S):CONFIG.ADS_RETRY_BASE_S;
+    console.warn(`[ads] ${kind} failed to load, retry in ${r.delay}s`,err?.code??"",err?.message??"");
+    r.timer=setTimeout(()=>{
+      r.timer=0;
+      if(kind==="interstitial") this.prepInterstitial(); else this.prepRewarded();
+    },r.delay*1000);
+  },
+  retryReset(kind){
+    const r=this.retry[kind];
+    if(r.timer){ clearTimeout(r.timer); r.timer=0; }
+    r.delay=0;
   },
 
   rewardedReady(){ return this.rewardedLoaded; },

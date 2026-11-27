@@ -2639,8 +2639,10 @@ const Billing={
       return;
     }
     try{
-      // resolves only on a completed purchase; throws on cancel/failure
-      await NP.purchaseProduct({ productIdentifier:pack.productId, productType:"inapp", quantity:1 });
+      // resolves only on a completed purchase; throws on cancel/failure.
+      // isConsumable:true → the plugin consumes the token so the pack can
+      // be bought again (the 7.19.3 default is false = owned forever).
+      await NP.purchaseProduct({ productIdentifier:pack.productId, productType:"inapp", quantity:1, isConsumable:true });
       this.grantCoins(pack.coins);
     }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
   },
@@ -2661,7 +2663,8 @@ const Billing={
     }
     if(S.removeAds) return;
     try{
-      await NP.purchaseProduct({ productIdentifier:CONFIG.IAP_REMOVE_ADS_PRODUCT_ID, productType:"inapp", quantity:1 });
+      // non-consumable: never consumed, so it stays owned and restorable
+      await NP.purchaseProduct({ productIdentifier:CONFIG.IAP_REMOVE_ADS_PRODUCT_ID, productType:"inapp", quantity:1, isConsumable:false });
       this.grantRemoveAds();
     }catch(e){ console.warn("[iap] purchase failed/cancelled",e); }
   },

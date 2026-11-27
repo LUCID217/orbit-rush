@@ -1,6 +1,6 @@
 # 001: Fresh review
 
-**Status:** open
+**Status:** done (2026-11-28, commits 3c158cf, f6702d8; report `_reports/2026-11-28-001-fresh-review.md`)
 
 **Goal:** review the whole game as it stands (`www/index.html`, the Android wrapper config, `scripts/`, store metadata) using `REVIEW.md`, with an eye on what blocks or risks the first Google Play release. You did not write this code: your job is to find problems, not to approve.
 

@@ -3,7 +3,7 @@
 You are working on **Orbit Rush**, Eugene's one-tap hypercasual orbit game (ETS / Deadweight Developments). The whole game is `www/index.html`: plain HTML/CSS/JS, no build step. It's wrapped for Android with Capacitor 7. `README.md` is the reference for setup, release steps and languages.
 
 ## Current milestone
-Pre-release. The web build is live on Netlify (every push to `main` deploys it). Aim: first ad-revenue launch on Google Play, starting with LATAM and Southeast Asia. Still on Google's test AdMob IDs and placeholder in-app product IDs. Next: brief 001 (fresh review). Keep this line up to date at the end of every run.
+Pre-release. The web build is live on Netlify (every push to `main` deploys it). Aim: first ad-revenue launch on Google Play, starting with LATAM and Southeast Asia. Still on Google's test AdMob IDs and placeholder in-app product IDs. Brief 001 (fresh review) done 2026-11-28: Eugene to decide on the ads/billing/economy fixes in `_reports/2026-11-28-001-fresh-review.md` (interstitials never fire, coin packs not consumable, restore broken) before any Play upload. No open brief. Keep this line up to date at the end of every run.
 
 ## Read first, every session
 1. `GLOSSARY.md`: the shared language. Use these exact terms.

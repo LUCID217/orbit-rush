@@ -2469,8 +2469,8 @@ const Ads={
         document.documentElement.style.setProperty("--banner-h",h+"px");
         Game.resize();
       });
-      AdMob.addListener("onInterstitialAdLoaded",()=>{ this.interstitialLoaded=true; });
-      AdMob.addListener("onInterstitialAdDismissed",()=>{ this.interstitialLoaded=false; this.prepInterstitial(); });
+      AdMob.addListener("interstitialAdLoaded",()=>{ this.interstitialLoaded=true; });
+      AdMob.addListener("interstitialAdDismissed",()=>{ this.interstitialLoaded=false; this.prepInterstitial(); });
       AdMob.addListener("onRewardedVideoAdLoaded",()=>{ this.rewardedLoaded=true; });
       AdMob.addListener("onRewardedVideoAdReward",()=>{ this.grantPendingReward(); });
       AdMob.addListener("onRewardedVideoAdDismissed",()=>{ this.rewardedLoaded=false; this.pendingReward=null; this.prepRewarded(); });

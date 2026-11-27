@@ -20,6 +20,7 @@ Every agent reads this before writing code. The reviewer checks every change aga
 - Native plugins (AdMob, purchases, haptics, keep-awake) are optional: in a browser or on failure the game keeps running and the related buttons hide.
 - No per-frame allocation in the game loop (pooled particles); respect `lowFX()` and `DPR_CAP`.
 - Plugin versions stay pinned (ADR 0003).
+- Grant IAP only on a completed purchase; reconcile getPurchases() at boot; never grant a purchase token twice.
 
 ## Checks
 - `bash tools/check.sh` must pass before any commit.

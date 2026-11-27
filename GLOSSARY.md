@@ -40,5 +40,7 @@ The shared language for Orbit Rush. Use these exact terms in code, docs, commit 
 | **Banner / Interstitial / Rewarded** | The three ad formats | `Ads` |
 | **Remove Ads** | Non-consumable purchase | `IAP_REMOVE_ADS_PRODUCT_ID` |
 | **Coin pack** | Consumable purchase | `IAP_COIN_PACKS` |
+| **Pending purchase** | A purchase whose payment hasn't cleared (cash, convenience store); never granted until it completes | `Billing.completed()`, `iap_pending` |
+| **Reconcile** | Silent boot check of `getPurchases()`: pays completed coin packs not yet paid, consumes them, restores Remove Ads | `Billing.reconcile()`, `S.iapGranted` |
 | **Crew invite** | Optional web-only email card after a best or LEGENDARY run | `Crew`, `CREW_*` |
 | **Save** | Local progress in localStorage | `S`, `DEFAULT_SAVE`, `SAVE_KEY` |

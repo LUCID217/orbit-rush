@@ -1,6 +1,6 @@
 # 002: Revenue fixes (ads and billing)
 
-**Status:** open
+**Status:** done (2026-11-28, commits 7748e37, bc93753, 7760131, af4b4b7, d239236, 640a675; report `_reports/2026-11-28-002-revenue-fixes.md`)
 
 **Goal:** fix items 1–5 of `_reports/2026-11-28-001-fresh-review.md`. Eugene approved all five on 28 Nov 2026.
 1. Interstitial listeners use the event names the pinned `@capacitor-community/admob` 7.2.0 actually emits.

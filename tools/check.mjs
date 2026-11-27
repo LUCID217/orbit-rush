@@ -76,8 +76,7 @@ if (CONFIG) {
 
 // 5. Plugin API guards (ADR 0003). The plugins are pinned, so their event
 // names and call shapes are fixed; a wrong name fails silently on device.
-// WARN for now (fixes are waiting on Eugene, see the 001 review report);
-// switch each to fail() once the code is fixed.
+// All FAIL since brief 002 fixed the code (each was proven to catch the old code).
 {
   // Every event name @capacitor-community/admob 7.2.0 emits (dist/esm/*/…-plugin-events.enum.d.ts).
   const ADMOB_V7_EVENTS = new Set([
@@ -91,14 +90,34 @@ if (CONFIG) {
   ]);
   const listened = [...html.matchAll(/AdMob\.addListener\(\s*["']([^"']+)["']/g)].map(m => m[1]);
   const bad = listened.filter(e => !ADMOB_V7_EVENTS.has(e));
-  bad.length ? warn(`AdMob listens for event(s) the pinned v7 plugin never emits: ${bad.join(", ")}`) : ok(`${listened.length} AdMob event names match v7`);
+  bad.length ? fail(`AdMob listens for event(s) the pinned v7 plugin never emits: ${bad.join(", ")}`) : ok(`${listened.length} AdMob event names match v7`);
+
+  // Every prepare*() needs its FailedToLoad listener, or one failed load
+  // (offline at launch) leaves that format dead for the whole session.
+  const PREPARE_FAIL_EVENT = {
+    prepareInterstitial: "interstitialAdFailedToLoad",
+    prepareRewardVideoAd: "onRewardedVideoAdFailedToLoad",
+    prepareRewardInterstitialAd: "onRewardedInterstitialAdFailedToLoad",
+  };
+  const prepares = [...new Set([...html.matchAll(/AdMob\.(prepare[A-Za-z]*)\(/g)].map(m => m[1]))];
+  for (const p of prepares) {
+    const ev = PREPARE_FAIL_EVENT[p];
+    if (!ev) fail(`AdMob.${p}() is not a known 7.2.0 prepare call (add it to PREPARE_FAIL_EVENT in check.mjs)`);
+    else if (!listened.includes(ev)) fail(`AdMob.${p}() has no "${ev}" listener: a failed load is never retried`);
+  }
+  if (prepares.length) ok(`${prepares.length} AdMob prepare call(s), each with a FailedToLoad listener`);
 
   // @capgo/native-purchases 7.19.3: consumables need isConsumable:true or Play
   // treats the pack as owned forever (one purchase per player, ever).
-  const coinBuy = html.match(/buyCoinPack[\s\S]*?purchaseProduct\(\s*\{([^}]*)\}/);
-  if (coinBuy && !/isConsumable\s*:\s*true/.test(coinBuy[1])) warn("coin packs are bought without isConsumable:true: each pack can only ever be bought once");
+  const coinBuy = html.match(/async\s+buyCoinPack\s*\([\s\S]*?\{[\s\S]*?purchaseProduct\(\s*\{([^}]*)\}/);
+  if (!coinBuy) fail("Billing.buyCoinPack purchaseProduct({...}) call not found");
+  else if (!/isConsumable\s*:\s*true/.test(coinBuy[1])) fail("coin packs are bought without isConsumable:true: each pack can only ever be bought once");
+  else ok("coin packs are bought as consumables");
+  // Remove Ads is non-consumable: consuming it would make it unrestorable.
+  const raBuy = html.match(/async\s+buyRemoveAds\s*\([\s\S]*?\{[\s\S]*?purchaseProduct\(\s*\{([^}]*)\}/);
+  if (raBuy && /isConsumable\s*:\s*true/.test(raBuy[1])) fail("Remove Ads is bought with isConsumable:true: it would be consumed and could never be restored");
   // restorePurchases() resolves to void in 7.x; owned items come from getPurchases().
-  if (/=\s*await\s+NP\.restorePurchases\(\)/.test(html)) warn("Billing.restore reads the result of restorePurchases(), which returns nothing in native-purchases 7.x: Remove Ads can never be restored");
+  if (/=\s*await\s+NP\.restorePurchases\(\)/.test(html)) fail("Billing.restore reads the result of restorePurchases(), which returns nothing in native-purchases 7.x: Remove Ads can never be restored");
 }
 
 // 6. Old Android WebViews: structuredClone needs Chrome 98+. In loadSave() a

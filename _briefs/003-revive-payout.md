@@ -1,6 +1,6 @@
 # 003: Revive payout exploit
 
-**Status:** open (do after 002)
+**Status:** done (2026-11-28, commit 221bcb2; report `_reports/2026-11-28-003-revive-payout.md`)
 
 **Goal:** fix items 6–7 of `_reports/2026-11-28-001-fresh-review.md`. Eugene approved on 28 Nov 2026.
 - Coins and XP for a run are paid once in total: after a revive, a later game over pays only for what was earned since the last payout (score and perfects). The player's final total for a run must equal what a no-revive run with the same final score and perfects would pay.

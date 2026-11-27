@@ -32,6 +32,7 @@ The shared language for Orbit Rush. Use these exact terms in code, docs, commit 
 | **Missions** | Generated goals | `Missions` |
 | **Unlock** | A shop item opened by lifetime XP | `unlockCost()` |
 | **Coins** | Soft currency from runs and coin packs | `coins`, `COINS_*` |
+| **Payout** | What a game over adds: coins and XP for score and perfects earned since the run's last payout, so a revived run pays once in total | `Game.payout()`, `runCoins()` |
 | **Shop categories** | trail, skin, bg, sound, fx | `SHOP_CATS` |
 
 ## Money and reach

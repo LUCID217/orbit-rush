@@ -23,6 +23,12 @@ The living state of the project. Each run updates it.
   - `af4b4b7` grant only on `purchaseState "1"`, reconcile at boot, `S.iapGranted` token list, `iap_pending` message
   - `d239236` FailedToLoad listeners and retry backoff (`ADS_RETRY_*`)
   - `640a675` the check now fails on all of these
+- 2026-11-28, brief 003 (revive payout), report `_reports/2026-11-28-003-revive-payout.md`. Items 6–7 fixed in `221bcb2`:
+  - a game over pays only what was earned since the run's last payout (`Game.payout()`, `runCoins()`); a revived run pays the same as a no-revive run with the same final score and perfects
+  - `runsPlayed` and the "play N runs" mission count in `startRun`; `S.deaths` still counts every death (interstitial cadence)
+  - rewarded 2× XP is once per run (`Game.doubleXPUsed`, moved from `Ads`), doubles landing XP only (`runXPBonus` kept apart)
+  - over screen after a revive: `+N XP · run total M`, `+N 🪙 · run total M (balance)` (new `STR.run_total`)
+  - `tools/test-revive.mjs` (from `check.sh`) loads the game in a node vm with stubs and plays die → revive → die → revive → die; fails 8 asserts on the old code
 
 ## Test on a device before upload (brief 002)
 - A real interstitial shows: die 3 times with 60 s or more since the last one, decline revive, and the ad appears; after it closes, the next one loads.
@@ -30,13 +36,16 @@ The living state of the project. Each run updates it.
 - Buy Remove Ads, uninstall, reinstall: the banner is gone at launch with no tap and no toast. Then tap Restore: it shows "Ads removed".
 - A pending or slow payment ("Slow test card, approves after a few minutes"): the pending message shows and no coins are added. After it approves, relaunch: coins are added once and the pack can be bought again.
 - Airplane mode at launch, then reconnect: within about 2 minutes, CONTINUE and 2× XP work again (logcat shows `[ads] … retry in Ns`).
+- (brief 003) Die, take 2× XP, CONTINUE, die again: 2× XP is greyed out; the coin and XP lines read `+N · run total M` and fit on a small phone in every language.
 
 ## Interpretations
 - Brief 002: the "silent" boot check shows no toast for anything, including coins from a pending payment that cleared. Asked Eugene whether he wants a toast (002 report, Needs Eugene 1).
+- Brief 003: a run counts when it starts, so a run abandoned from pause (Home or Restart) now counts too. Restart from pause counts as a new run.
+- Brief 003: if 2× XP was taken at an earlier death of the run, it stays greyed out on later deaths of that run (once per run, as the brief says), even though the XP earned after the revive was never doubled.
 - Brief 002: Remove Ads is restored from ownership (`getPurchases`) every time and never gated on the token list. Only coin packs use `S.iapGranted`.
 
 ## Known bugs
-- See "Needs Eugene" items 6–9 in `_reports/2026-11-28-001-fresh-review.md` (found 2026-11-28, not fixed yet). Items 1–5 were fixed by brief 002.
+- See "Needs Eugene" items 8–22 in `_reports/2026-11-28-001-fresh-review.md` (found 2026-11-28, not fixed yet). Items 1–5 were fixed by brief 002, items 6–7 by brief 003.
 
 ## Ideas
 - Run `Billing.reconcile(true)` on app resume too, so a pending payment that clears while the game is in the background is added without a relaunch.

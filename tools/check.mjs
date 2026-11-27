@@ -32,7 +32,9 @@ if (CONFIG) {
   const used = new Set([...html.matchAll(/CONFIG\.([A-Z0-9_]+)/g)].map(m => m[1]));
   const missing = [...used].filter(k => !(k in CONFIG));
   missing.length ? missing.forEach(k => fail(`CONFIG.${k} is read but not defined`)) : ok(`${used.size} CONFIG keys read, all defined`);
-  const unused = Object.keys(CONFIG).filter(k => !used.has(k));
+  // ADMOB_APP_ID is read by scripts/set-ad-ids.js and kept in sync with the
+  // manifest, not by the game code, so it's expected to be "unused" here.
+  const unused = Object.keys(CONFIG).filter(k => !used.has(k) && k !== "ADMOB_APP_ID");
   if (unused.length) warn(`CONFIG keys defined but never read: ${unused.join(", ")}`);
 }
 
@@ -48,6 +50,10 @@ if (STR) {
     const keys = new Set([...code.matchAll(/\btr\(\s*["']([A-Za-z0-9_.]+)["']\s*[,)]/g)].map(m => m[1]));
     const missing = [...keys].filter(k => !(k in STR.en));
     missing.length ? missing.forEach(k => fail(`tr("${k}") has no English text in STR.en`)) : ok(`${keys.size} tr() keys, all in STR.en`);
+    // Static HTML text is filled by UI.applyLang() from data-i18n="key".
+    const htmlKeys = new Set([...html.matchAll(/\bdata-i18n="([^"]+)"/g)].map(m => m[1]));
+    const htmlMissing = [...htmlKeys].filter(k => !(k in STR.en));
+    htmlMissing.length ? htmlMissing.forEach(k => fail(`data-i18n="${k}" has no English text in STR.en`)) : ok(`${htmlKeys.size} data-i18n keys, all in STR.en`);
     const listM = html.match(/LIST:\s*(\[[^\]]*\])/);
     const list = listM ? vm.runInNewContext(listM[1]) : [];
     for (const lang of list) {
@@ -67,6 +73,38 @@ if (CONFIG) {
   if (/ca-app-pub-3940256099942544/.test(JSON.stringify(CONFIG))) warn("AdMob IDs are Google's test IDs (fine before release; run scripts/set-ad-ids.js before the first Play upload)");
   if (CONFIG.ADS_TESTING_MODE) warn("ADS_TESTING_MODE is true");
 }
+
+// 5. Plugin API guards (ADR 0003). The plugins are pinned, so their event
+// names and call shapes are fixed; a wrong name fails silently on device.
+// WARN for now (fixes are waiting on Eugene, see the 001 review report);
+// switch each to fail() once the code is fixed.
+{
+  // Every event name @capacitor-community/admob 7.2.0 emits (dist/esm/*/…-plugin-events.enum.d.ts).
+  const ADMOB_V7_EVENTS = new Set([
+    "bannerAdSizeChanged", "bannerAdLoaded", "bannerAdFailedToLoad", "bannerAdOpened", "bannerAdClosed", "bannerAdImpression",
+    "interstitialAdLoaded", "interstitialAdFailedToLoad", "interstitialAdShowed", "interstitialAdFailedToShow", "interstitialAdDismissed",
+    "onRewardedVideoAdLoaded", "onRewardedVideoAdFailedToLoad", "onRewardedVideoAdShowed", "onRewardedVideoAdFailedToShow",
+    "onRewardedVideoAdDismissed", "onRewardedVideoAdReward",
+    "onRewardedInterstitialAdLoaded", "onRewardedInterstitialAdFailedToLoad", "onRewardedInterstitialAdShowed",
+    "onRewardedInterstitialAdFailedToShow", "onRewardedInterstitialAdDismissed", "onRewardedInterstitialAdReward",
+    "consentInfoUpdate",
+  ]);
+  const listened = [...html.matchAll(/AdMob\.addListener\(\s*["']([^"']+)["']/g)].map(m => m[1]);
+  const bad = listened.filter(e => !ADMOB_V7_EVENTS.has(e));
+  bad.length ? warn(`AdMob listens for event(s) the pinned v7 plugin never emits: ${bad.join(", ")}`) : ok(`${listened.length} AdMob event names match v7`);
+
+  // @capgo/native-purchases 7.19.3: consumables need isConsumable:true or Play
+  // treats the pack as owned forever (one purchase per player, ever).
+  const coinBuy = html.match(/buyCoinPack[\s\S]*?purchaseProduct\(\s*\{([^}]*)\}/);
+  if (coinBuy && !/isConsumable\s*:\s*true/.test(coinBuy[1])) warn("coin packs are bought without isConsumable:true: each pack can only ever be bought once");
+  // restorePurchases() resolves to void in 7.x; owned items come from getPurchases().
+  if (/=\s*await\s+NP\.restorePurchases\(\)/.test(html)) warn("Billing.restore reads the result of restorePurchases(), which returns nothing in native-purchases 7.x: Remove Ads can never be restored");
+}
+
+// 6. Old Android WebViews: structuredClone needs Chrome 98+. In loadSave() a
+// ReferenceError there also hits the catch fallback, so the game can't boot.
+if (/\bstructuredClone\(/.test(html)) warn("structuredClone() is used (needs WebView 98+; on older WebViews the save loader throws and the game doesn't start)");
+
 
 console.log(fails ? `CHECK: FAILED (${fails} fail, ${warns} warn)` : `CHECK: OK (${warns} warn)`);
 process.exit(fails ? 1 : 0);
